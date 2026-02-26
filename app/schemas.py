@@ -98,3 +98,8 @@ class BookDetailResponse(BaseModel):
     chapters: List[BookChapterFile] = Field(default_factory=list)
     characters: List[BookCharacterFile] = Field(default_factory=list)
     setting_markdown: str = ""
+
+
+class ProviderModelsResponse(BaseModel):
+    provider: str
+    models: List[str] = Field(default_factory=list)

@@ -1,10 +1,11 @@
-const PROVIDERS = ["open-ai", "anthropic", "openrouter", "venice"];
+const PROVIDERS = ["open-ai", "anthropic", "openrouter", "venice", "kilo-code"];
 
 const PROVIDER_LABEL = {
   "open-ai": "OPEN-AI",
   anthropic: "ANTHROPIC",
   openrouter: "OpenRouter",
   venice: "Venice",
+  "kilo-code": "Kilo Code",
 };
 
 const DEFAULT_MODEL_BY_PROVIDER = {
@@ -12,7 +13,18 @@ const DEFAULT_MODEL_BY_PROVIDER = {
   anthropic: "claude-sonnet-4-20250514",
   openrouter: "openai/gpt-4.1-mini",
   venice: "venice-uncensored",
+  "kilo-code": "anthropic/claude-sonnet-4.5",
 };
+
+const MODEL_OPTIONS_BY_PROVIDER = {
+  "open-ai": ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],
+  anthropic: ["claude-sonnet-4-20250514", "claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest"],
+  openrouter: ["openai/gpt-4.1-mini", "openai/gpt-4.1", "anthropic/claude-sonnet-4", "google/gemini-2.5-pro"],
+  venice: ["venice-uncensored", "llama-3.3-70b", "qwen2.5-72b-instruct"],
+  "kilo-code": ["anthropic/claude-sonnet-4.5", "openai/gpt-4.1-mini", "google/gemini-2.5-pro"],
+};
+
+const CUSTOM_MODEL_VALUE = "__custom__";
 
 const STORAGE_KEY = "book-pro-panel-settings";
 
@@ -21,11 +33,15 @@ const state = {
   pageSize: 10,
   total: 0,
   items: [],
+  pendingUploads: [],
+  nextPendingId: 1,
   currentBook: null,
   currentTab: "chapter",
   currentView: "library",
   uploading: false,
   pendingUploadMode: "multi",
+  modelOptions: {},
+  modelOptionsLoaded: {},
   settings: {
     selectedProvider: "open-ai",
     language: "ko",
@@ -35,6 +51,7 @@ const state = {
       anthropic: "",
       openrouter: "",
       venice: "",
+      "kilo-code": "",
     },
   },
 };
@@ -49,12 +66,15 @@ const el = {
   viewSettings: document.getElementById("view-settings"),
 
   settingsProviderSelect: document.getElementById("settings-provider-select"),
-  settingsModelInput: document.getElementById("settings-model-input"),
+  settingsModelSelect: document.getElementById("settings-model-select"),
+  settingsCustomModelField: document.getElementById("settings-custom-model-field"),
+  settingsCustomModelInput: document.getElementById("settings-custom-model-input"),
   settingsLanguageInput: document.getElementById("settings-language-input"),
   apiKeyOpenAi: document.getElementById("api-key-open-ai"),
   apiKeyAnthropic: document.getElementById("api-key-anthropic"),
   apiKeyOpenrouter: document.getElementById("api-key-openrouter"),
   apiKeyVenice: document.getElementById("api-key-venice"),
+  apiKeyKiloCode: document.getElementById("api-key-kilo-code"),
   settingsSaveBtn: document.getElementById("settings-save-btn"),
   settingsActiveSummary: document.getElementById("settings-active-summary"),
 
@@ -131,12 +151,25 @@ function createDefaultSettings() {
       anthropic: "",
       openrouter: "",
       venice: "",
+      "kilo-code": "",
     },
   };
 }
 
 function normalizeProvider(value) {
   return PROVIDERS.includes(value) ? value : "open-ai";
+}
+
+function sortModelsAlphabetically(models) {
+  return [...models].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }));
+}
+
+function initializeModelOptionState() {
+  PROVIDERS.forEach((provider) => {
+    const defaults = MODEL_OPTIONS_BY_PROVIDER[provider] || [];
+    state.modelOptions[provider] = sortModelsAlphabetically(defaults);
+    state.modelOptionsLoaded[provider] = false;
+  });
 }
 
 function loadSettingsFromStorage() {
@@ -217,17 +250,127 @@ function renderSettingsSummary() {
   el.settingsActiveSummary.textContent = `현재 기본값: ${providerLabel} / ${model || "모델 미설정"} / API Key ${hasKey ? "설정됨" : "미설정"}`;
 }
 
+function ensureModelForProvider(provider) {
+  if (!state.settings.models[provider]) {
+    state.settings.models[provider] = DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+  }
+}
+
+function getProviderModelOptions(provider) {
+  const loaded = state.modelOptions[provider];
+  if (Array.isArray(loaded) && loaded.length) {
+    return sortModelsAlphabetically(loaded);
+  }
+  return sortModelsAlphabetically(
+    MODEL_OPTIONS_BY_PROVIDER[provider] || [DEFAULT_MODEL_BY_PROVIDER[provider] || ""],
+  );
+}
+
+function setCustomModelVisible(visible) {
+  el.settingsCustomModelField.classList.toggle("hidden", !visible);
+}
+
+function renderModelSelect(provider) {
+  ensureModelForProvider(provider);
+
+  const activeModel = state.settings.models[provider] || "";
+  const options = getProviderModelOptions(provider);
+  const inList = options.includes(activeModel);
+
+  el.settingsModelSelect.innerHTML = "";
+  for (const model of options) {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    el.settingsModelSelect.append(option);
+  }
+
+  const customOption = document.createElement("option");
+  customOption.value = CUSTOM_MODEL_VALUE;
+  customOption.textContent = "직접 입력";
+  el.settingsModelSelect.append(customOption);
+
+  if (inList) {
+    el.settingsModelSelect.value = activeModel;
+    el.settingsCustomModelInput.value = "";
+    setCustomModelVisible(false);
+    return;
+  }
+
+  el.settingsModelSelect.value = CUSTOM_MODEL_VALUE;
+  el.settingsCustomModelInput.value = activeModel;
+  setCustomModelVisible(true);
+}
+
+function readModelFromControls(provider) {
+  const selectedValue = (el.settingsModelSelect.value || "").trim();
+  if (selectedValue === CUSTOM_MODEL_VALUE) {
+    const customValue = el.settingsCustomModelInput.value.trim();
+    if (customValue) {
+      return customValue;
+    }
+    return state.settings.models[provider] || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+  }
+  return selectedValue || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+}
+
+async function fetchProviderModels(provider, { force = false, silent = false } = {}) {
+  const normalized = normalizeProvider(provider);
+  if (!force && state.modelOptionsLoaded[normalized]) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("provider", normalized);
+  const apiKey = (state.settings.apiKeys[normalized] || "").trim();
+  if (apiKey) {
+    formData.append("api_key", apiKey);
+  }
+
+  try {
+    const payload = await fetchJson("/providers/models", {
+      method: "POST",
+      body: formData,
+    });
+    const models = Array.isArray(payload.models)
+      ? payload.models.map((item) => String(item)).filter((item) => item.trim().length > 0)
+      : [];
+
+    if (!models.length) {
+      throw new Error(`${PROVIDER_LABEL[normalized]} 모델 목록이 비어 있습니다.`);
+    }
+
+    state.modelOptions[normalized] = sortModelsAlphabetically(models);
+    state.modelOptionsLoaded[normalized] = true;
+
+    if (!state.settings.models[normalized]) {
+      state.settings.models[normalized] = models[0];
+      persistSettings();
+    }
+
+    if (state.settings.selectedProvider === normalized) {
+      renderSettingsForm();
+    }
+  } catch (error) {
+    state.modelOptionsLoaded[normalized] = false;
+    if (!silent) {
+      showToast(error.message || `${PROVIDER_LABEL[normalized]} 모델 목록 조회 실패`, true);
+    }
+  }
+}
+
 function renderSettingsForm() {
   const provider = state.settings.selectedProvider;
 
   el.settingsProviderSelect.value = provider;
-  el.settingsModelInput.value = state.settings.models[provider] || "";
+  renderModelSelect(provider);
   el.settingsLanguageInput.value = state.settings.language || "ko";
 
   el.apiKeyOpenAi.value = state.settings.apiKeys["open-ai"] || "";
   el.apiKeyAnthropic.value = state.settings.apiKeys.anthropic || "";
   el.apiKeyOpenrouter.value = state.settings.apiKeys.openrouter || "";
   el.apiKeyVenice.value = state.settings.apiKeys.venice || "";
+  el.apiKeyKiloCode.value = state.settings.apiKeys["kilo-code"] || "";
 
   renderSettingsSummary();
 }
@@ -236,12 +379,7 @@ function syncSettingsFromForm() {
   const prevProvider = state.settings.selectedProvider;
   const nextProvider = normalizeProvider(el.settingsProviderSelect.value);
 
-  const prevModelInput = el.settingsModelInput.value.trim();
-  if (prevModelInput) {
-    state.settings.models[prevProvider] = prevModelInput;
-  } else if (!state.settings.models[prevProvider]) {
-    state.settings.models[prevProvider] = DEFAULT_MODEL_BY_PROVIDER[prevProvider] || "";
-  }
+  state.settings.models[prevProvider] = readModelFromControls(prevProvider);
 
   state.settings.selectedProvider = nextProvider;
   state.settings.language = el.settingsLanguageInput.value.trim() || "ko";
@@ -249,15 +387,12 @@ function syncSettingsFromForm() {
   state.settings.apiKeys.anthropic = el.apiKeyAnthropic.value.trim();
   state.settings.apiKeys.openrouter = el.apiKeyOpenrouter.value.trim();
   state.settings.apiKeys.venice = el.apiKeyVenice.value.trim();
+  state.settings.apiKeys["kilo-code"] = el.apiKeyKiloCode.value.trim();
 
-  if (!state.settings.models[nextProvider]) {
-    state.settings.models[nextProvider] = DEFAULT_MODEL_BY_PROVIDER[nextProvider] || "";
-  }
-
-  el.settingsModelInput.value = state.settings.models[nextProvider];
+  ensureModelForProvider(nextProvider);
 
   persistSettings();
-  renderSettingsSummary();
+  renderSettingsForm();
 }
 
 function switchView(view) {
@@ -273,6 +408,52 @@ function switchView(view) {
 
 function currentPageCount() {
   return Math.max(1, Math.ceil(state.total / state.pageSize));
+}
+
+function pendingProcessingCount() {
+  return state.pendingUploads.filter((item) => item.status === "queued" || item.status === "processing").length;
+}
+
+function renderLibraryMetrics() {
+  const processing = pendingProcessingCount();
+  el.metricTotalBooks.textContent = String(state.total + processing);
+  el.metricProcessingBooks.textContent = String(processing);
+  el.metricCompletedBooks.textContent = String(state.total);
+}
+
+function addPendingUpload(fileName) {
+  const id = `pending-${state.nextPendingId++}`;
+  const row = {
+    id,
+    fileName,
+    status: "queued",
+    progress: 0,
+    error: "",
+    timerId: null,
+  };
+  state.pendingUploads.unshift(row);
+  renderLibraryMetrics();
+  renderBooksTable(state.items);
+  return row;
+}
+
+function updatePendingUpload(id, patch) {
+  const row = state.pendingUploads.find((item) => item.id === id);
+  if (!row) return;
+  Object.assign(row, patch);
+  renderLibraryMetrics();
+  renderBooksTable(state.items);
+}
+
+function removePendingUpload(id) {
+  const index = state.pendingUploads.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  const [row] = state.pendingUploads.splice(index, 1);
+  if (row && row.timerId) {
+    window.clearInterval(row.timerId);
+  }
+  renderLibraryMetrics();
+  renderBooksTable(state.items);
 }
 
 function setUploading(isUploading) {
@@ -306,11 +487,8 @@ async function loadLibrary({ autoOpenFirst = false } = {}) {
   state.total = payload.total;
   state.items = payload.items;
 
-  el.metricTotalBooks.textContent = String(payload.total);
-  el.metricProcessingBooks.textContent = "0";
-  el.metricCompletedBooks.textContent = String(payload.total);
-
-  renderBooksTable(payload.items);
+  renderLibraryMetrics();
+  renderBooksTable(state.items);
 
   const totalPages = currentPageCount();
   el.libraryPageInfo.textContent = `페이지 ${state.page} / ${totalPages}`;
@@ -323,21 +501,49 @@ async function loadLibrary({ autoOpenFirst = false } = {}) {
 }
 
 function renderBooksTable(items) {
-  if (!items.length) {
-    el.booksTableBody.innerHTML = `
-      <tr>
-        <td class="empty-row" colspan="6">저장된 책이 없습니다. EPUB 업로드 후 시작하세요.</td>
-      </tr>
-    `;
-    return;
-  }
+  const pendingRows = state.pendingUploads
+    .map((item) => {
+      const statusLabel =
+        item.status === "processing"
+          ? "요약 중"
+          : item.status === "queued"
+            ? "대기 중"
+            : item.status === "failed"
+              ? "실패"
+              : "완료";
+      const statusClass =
+        item.status === "failed"
+          ? "status-failed"
+          : item.status === "completed"
+            ? "status-completed"
+            : "status-processing";
 
-  el.booksTableBody.innerHTML = items
+      return `
+        <tr class="pending-row">
+          <td>${escapeHtml(item.fileName)}</td>
+          <td>
+            <span class="status-chip ${statusClass}">${statusLabel}</span>
+            <div class="progress-track">
+              <div class="progress-fill" style="width:${Math.max(0, Math.min(item.progress || 0, 100))}%"></div>
+            </div>
+            <div class="progress-text">${Math.round(item.progress || 0)}%</div>
+            ${item.error ? `<div class="error-text">${escapeHtml(item.error)}</div>` : ""}
+          </td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td>${item.status === "processing" || item.status === "queued" ? "진행 중" : "-"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const savedRows = items
     .map(
       (item) => `
       <tr>
         <td>${escapeHtml(item.book_title)}</td>
-        <td>${escapeHtml(item.status)}</td>
+        <td><span class="status-chip status-completed">${escapeHtml(item.status)}</span></td>
         <td>${escapeHtml(formatDate(item.updated_at))}</td>
         <td>${item.chapter_count}</td>
         <td>${item.character_count}</td>
@@ -348,6 +554,17 @@ function renderBooksTable(items) {
     `,
     )
     .join("");
+
+  if (!pendingRows && !savedRows) {
+    el.booksTableBody.innerHTML = `
+      <tr>
+        <td class="empty-row" colspan="6">저장된 책이 없습니다. EPUB 업로드 후 시작하세요.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  el.booksTableBody.innerHTML = `${pendingRows}${savedRows}`;
 
   el.booksTableBody.querySelectorAll("[data-open-book]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -510,36 +727,80 @@ function getRunConfig() {
   return { provider, model, apiKey, language };
 }
 
-function buildUploadFormData(files) {
+function buildSingleUploadFormData(file, config) {
   const formData = new FormData();
-  const config = getRunConfig();
-
-  files.forEach((file) => formData.append("files", file));
+  formData.append("file", file);
   formData.append("provider", config.provider);
   formData.append("language", config.language);
   if (config.model) formData.append("model", config.model);
   if (config.apiKey) formData.append("api_key", config.apiKey);
-
   return formData;
+}
+
+async function uploadSingleFile(file, config, pendingRow) {
+  updatePendingUpload(pendingRow.id, { status: "processing", progress: 6, error: "" });
+
+  const timerId = window.setInterval(() => {
+    const target = (pendingRow.progress || 0) + Math.floor(Math.random() * 7) + 2;
+    updatePendingUpload(pendingRow.id, { progress: Math.min(target, 92) });
+  }, 700);
+
+  updatePendingUpload(pendingRow.id, { timerId });
+
+  try {
+    const formData = buildSingleUploadFormData(file, config);
+    const payload = await fetchJson("/summaries/from-epub", {
+      method: "POST",
+      body: formData,
+    });
+
+    window.clearInterval(timerId);
+    updatePendingUpload(pendingRow.id, { status: "completed", progress: 100, timerId: null });
+    window.setTimeout(() => removePendingUpload(pendingRow.id), 1200);
+    return { ok: true, payload };
+  } catch (error) {
+    window.clearInterval(timerId);
+    updatePendingUpload(pendingRow.id, {
+      status: "failed",
+      progress: 100,
+      error: error.message || "요약 실패",
+      timerId: null,
+    });
+    return { ok: false, error };
+  }
 }
 
 async function uploadFiles(files) {
   if (!files.length) return;
 
+  let config;
+  try {
+    config = getRunConfig();
+  } catch (error) {
+    showToast(error.message || "설정 오류", true);
+    return;
+  }
+
+  const pendingRows = files.map((file) => addPendingUpload(file.name));
+
+  let successCount = 0;
+  let failureCount = 0;
+
   try {
     setUploading(true);
-    const formData = buildUploadFormData(files);
-    const payload = await fetchJson("/summaries/from-epubs", {
-      method: "POST",
-      body: formData,
-    });
 
-    showToast(`완료 ${payload.success_count}권 / 실패 ${payload.failure_count}권`, payload.failure_count > 0);
-
-    await loadLibrary({ autoOpenFirst: payload.success_count > 0 });
-    if (payload.success_count > 0) {
-      switchView("library");
+    for (let i = 0; i < files.length; i += 1) {
+      const result = await uploadSingleFile(files[i], config, pendingRows[i]);
+      if (result.ok) {
+        successCount += 1;
+        await loadLibrary({ autoOpenFirst: false });
+      } else {
+        failureCount += 1;
+      }
     }
+
+    showToast(`완료 ${successCount}권 / 실패 ${failureCount}권`, failureCount > 0);
+    if (successCount > 0) switchView("library");
   } catch (error) {
     showToast(error.message || "업로드 실패", true);
   } finally {
@@ -550,10 +811,20 @@ async function uploadFiles(files) {
 function bindSettingsEvents() {
   el.settingsProviderSelect.addEventListener("change", () => {
     syncSettingsFromForm();
-    renderSettingsForm();
+    void fetchProviderModels(state.settings.selectedProvider, { force: true, silent: false });
   });
 
-  el.settingsModelInput.addEventListener("change", () => {
+  el.settingsModelSelect.addEventListener("change", () => {
+    if (el.settingsModelSelect.value === CUSTOM_MODEL_VALUE) {
+      setCustomModelVisible(true);
+      el.settingsCustomModelInput.focus();
+      return;
+    }
+    setCustomModelVisible(false);
+    syncSettingsFromForm();
+  });
+
+  el.settingsCustomModelInput.addEventListener("change", () => {
     syncSettingsFromForm();
   });
 
@@ -561,14 +832,24 @@ function bindSettingsEvents() {
     syncSettingsFromForm();
   });
 
-  [el.apiKeyOpenAi, el.apiKeyAnthropic, el.apiKeyOpenrouter, el.apiKeyVenice].forEach((input) => {
-    input.addEventListener("change", () => {
+  [
+    { element: el.apiKeyOpenAi, provider: "open-ai" },
+    { element: el.apiKeyAnthropic, provider: "anthropic" },
+    { element: el.apiKeyOpenrouter, provider: "openrouter" },
+    { element: el.apiKeyVenice, provider: "venice" },
+    { element: el.apiKeyKiloCode, provider: "kilo-code" },
+  ].forEach(({ element, provider }) => {
+    element.addEventListener("change", () => {
       syncSettingsFromForm();
+      if (state.currentView === "settings") {
+        void fetchProviderModels(provider, { force: true, silent: true });
+      }
     });
   });
 
-  el.settingsSaveBtn.addEventListener("click", () => {
+  el.settingsSaveBtn.addEventListener("click", async () => {
     syncSettingsFromForm();
+    await fetchProviderModels(state.settings.selectedProvider, { force: true, silent: true });
     showToast("설정을 저장했습니다.");
   });
 }
@@ -619,9 +900,11 @@ function bindEvents() {
 }
 
 async function init() {
+  initializeModelOptionState();
   loadSettingsFromStorage();
   bindEvents();
   setTab("chapter");
+  await fetchProviderModels(state.settings.selectedProvider, { force: true, silent: true });
 
   try {
     await loadLibrary();

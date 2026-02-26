@@ -28,6 +28,10 @@ _PROVIDER_ALIASES = {
     "open-router": "openrouter",
     "open_router": "openrouter",
     "venice": "venice",
+    "kilocode": "kilo-code",
+    "kilo-code": "kilo-code",
+    "kilo_code": "kilo-code",
+    "kilo code": "kilo-code",
 }
 
 _PROVIDER_BASE_URL = {
@@ -35,6 +39,7 @@ _PROVIDER_BASE_URL = {
     "anthropic": "https://api.anthropic.com/v1/",
     "openrouter": "https://openrouter.ai/api/v1",
     "venice": "https://api.venice.ai/api/v1",
+    "kilo-code": "https://api.kilo.ai/api/gateway",
 }
 
 _PROVIDER_DEFAULT_MODEL = {
@@ -42,6 +47,7 @@ _PROVIDER_DEFAULT_MODEL = {
     "anthropic": "claude-sonnet-4-20250514",
     "openrouter": "openai/gpt-4.1-mini",
     "venice": "venice-uncensored",
+    "kilo-code": "anthropic/claude-sonnet-4.5",
 }
 
 

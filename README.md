@@ -63,12 +63,17 @@ curl -X POST "http://127.0.0.1:8000/summaries/from-epubs" \
 - `anthropic`
 - `openrouter`
 - `venice`
+- `kilo-code`
 
 웹 패널에서는 `Settings` 페이지에서 아래를 설정한 뒤 업로드할 수 있습니다.
 - 기본 `Provider`
-- 기본 `Model`
+- 기본 `Model` (리스트 선택, 필요시 직접 입력)
 - 기본 `Language`
-- Provider별 API Key (`OPEN-AI`, `ANTHROPIC`, `OpenRouter`, `Venice`)
+- Provider별 API Key (`OPEN-AI`, `ANTHROPIC`, `OpenRouter`, `Venice`, `Kilo Code`)
+
+`Settings`에서 Provider를 선택하면 모델 목록을 해당 Provider API에서 자동 조회합니다.
+조회 실패 시에는 내장 기본 모델 목록을 fallback으로 사용합니다.
+EPUB 업로드를 시작하면 Library 목록에 즉시 표시되고, `요약 중` 상태와 진행 바가 함께 갱신됩니다.
 
 ## 응답 구조
 

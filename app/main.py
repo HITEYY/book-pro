@@ -14,8 +14,10 @@ from app.schemas import (
     BookSummary,
     MultiSummarizeError,
     MultiSummarizeResponse,
+    ProviderModelsResponse,
     SummarizeResponse,
 )
+from app.provider_models import fetch_provider_models
 from app.storage import list_books, read_book_detail, save_book_summary
 from app.summarizer import MultiProviderBookSummarizer, normalize_provider
 
@@ -48,6 +50,32 @@ def panel() -> FileResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/providers/models", response_model=ProviderModelsResponse)
+def get_provider_models(
+    provider: str = Form(...),
+    api_key: str | None = Form(default=None),
+) -> ProviderModelsResponse:
+    settings = get_settings()
+
+    try:
+        normalized = normalize_provider(provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    resolved_key = (api_key or "").strip()
+    if not resolved_key and normalized == normalize_provider(settings.default_provider):
+        resolved_key = settings.openai_api_key
+
+    try:
+        models = fetch_provider_models(normalized, api_key=resolved_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return ProviderModelsResponse(provider=normalized, models=models)
 
 
 def _build_summarizer(

@@ -169,18 +169,23 @@
                   <option value="anthropic">ANTHROPIC</option>
                   <option value="openrouter">OpenRouter</option>
                   <option value="venice">Venice</option>
+                  <option value="kilo-code">Kilo Code</option>
                 </select>
               </label>
               <label class="field">
                 <span>기본 Model</span>
-                <input id="settings-model-input" type="text" placeholder="예: gpt-4.1-mini" />
+                <select id="settings-model-select"></select>
+              </label>
+              <label class="field hidden" id="settings-custom-model-field">
+                <span>직접 입력 Model</span>
+                <input id="settings-custom-model-input" type="text" placeholder="예: gpt-4.1-mini" />
               </label>
               <label class="field">
                 <span>기본 Language</span>
                 <input id="settings-language-input" type="text" value="ko" />
               </label>
             </div>
-            <p class="settings-hint">Provider를 바꾸면 해당 Provider의 기본 Model 값을 자동 제안합니다.</p>
+            <p class="settings-hint">Model은 리스트에서 선택합니다. 목록에 없으면 직접 입력 Model을 사용하세요.</p>
           </section>
 
           <section class="panel">
@@ -203,6 +208,10 @@
               <label class="field">
                 <span>Venice API Key</span>
                 <input id="api-key-venice" type="password" placeholder="vce-..." />
+              </label>
+              <label class="field">
+                <span>Kilo Code API Key</span>
+                <input id="api-key-kilo-code" type="password" placeholder="kilo-..." />
               </label>
             </div>
             <p class="settings-hint" id="settings-active-summary"></p>
