@@ -3,7 +3,13 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.schemas import BookSummary, CharacterEvent, CharacterSummary, ChapterSummary
+from app.schemas import (
+    BookSummary,
+    ChapterCharacterTrait,
+    CharacterEvent,
+    CharacterSummary,
+    ChapterSummary,
+)
 
 _INVALID_CHARS_RE = re.compile(r'[\\/:*?"<>|]')
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -52,13 +58,27 @@ def _render_character_events(rows: list[CharacterEvent]) -> str:
 def _render_chapter_markdown(chapter: ChapterSummary) -> str:
     events = "\n".join(f"- {event}" for event in chapter.key_events) if chapter.key_events else "- 없음"
     character_events = _render_character_events(chapter.character_events)
+    character_traits = _render_character_traits(chapter.character_traits)
 
     return (
         f"# Chapter {chapter.chapter_index}: {chapter.chapter_title}\n\n"
         f"## 요약\n{chapter.summary}\n\n"
         f"## 핵심 사건\n{events}\n\n"
-        f"## 캐릭터별 사건/영향\n{character_events}\n"
+        f"## 캐릭터별 사건/영향\n{character_events}\n\n"
+        f"## 캐릭터 특징 관찰(정밀 분석)\n{character_traits}\n"
     )
+
+
+def _render_character_traits(rows: list[ChapterCharacterTrait]) -> str:
+    if not rows:
+        return "- 없음"
+
+    lines: list[str] = []
+    for row in rows:
+        traits = ", ".join(row.traits) if row.traits else "없음"
+        lines.append(f"- **인물**: {row.character}")
+        lines.append(f"  - 특징: {traits}")
+    return "\n".join(lines)
 
 
 def _render_character_markdown(character: CharacterSummary) -> str:
@@ -77,16 +97,37 @@ def _render_character_markdown(character: CharacterSummary) -> str:
 
 def _render_setting_markdown(summary: BookSummary) -> str:
     world = summary.world_summary
+    style = summary.writing_style
     settings = "\n".join(f"- {item}" for item in world.settings) if world.settings else "- 없음"
     rules = "\n".join(f"- {item}" for item in world.rules) if world.rules else "- 없음"
     themes = "\n".join(f"- {item}" for item in world.themes) if world.themes else "- 없음"
+    style_devices = (
+        "\n".join(f"- {item}" for item in style.imagery_and_devices)
+        if style.imagery_and_devices
+        else "- 없음"
+    )
+    continuation = (
+        "\n".join(f"- {item}" for item in style.continuation_guidelines)
+        if style.continuation_guidelines
+        else "- 없음"
+    )
 
     return (
         f"# {summary.book_title} 세계관 설정\n\n"
         f"## 세계관 요약\n{world.summary}\n\n"
         f"## 설정\n{settings}\n\n"
         f"## 규칙\n{rules}\n\n"
-        f"## 테마\n{themes}\n"
+        f"## 테마\n{themes}\n\n"
+        f"## 작가 필체 분석\n"
+        f"- 핵심 요약: {style.summary}\n"
+        f"- 톤: {style.tone}\n"
+        f"- 문장 스타일: {style.sentence_style}\n"
+        f"- 어휘 선택: {style.diction}\n"
+        f"- 시점/서술 거리: {style.perspective}\n"
+        f"- 전개 속도: {style.pacing}\n"
+        f"- 대사 스타일: {style.dialogue_style}\n\n"
+        f"## 이미지/수사 패턴\n{style_devices}\n\n"
+        f"## 이어쓰기 가이드\n{continuation}\n"
     )
 
 
@@ -133,6 +174,7 @@ def list_books(root_dir: str | Path, *, page: int = 1, page_size: int = 10) -> d
         display_title = slug[len("book-") :] if slug.startswith("book-") else slug
         chapter_count = len(list((book_dir / "chapter").glob("*.md")))
         character_count = len(list((book_dir / "character").glob("*.md")))
+        is_completed = (book_dir / "setting.md").exists()
         latest_ts = _latest_markdown_timestamp(book_dir)
         books.append(
             {
@@ -140,7 +182,7 @@ def list_books(root_dir: str | Path, *, page: int = 1, page_size: int = 10) -> d
                 "book_title": _book_title_from_setting(book_dir, display_title),
                 "chapter_count": chapter_count,
                 "character_count": character_count,
-                "status": "completed",
+                "status": "completed" if is_completed else "processing",
                 "updated_at": _to_iso_utc(latest_ts),
                 "_latest_ts": latest_ts,
             }
@@ -244,8 +286,7 @@ def save_book_summary(summary: BookSummary, *, root_dir: str | Path = "books") -
     character_dir.mkdir(parents=True, exist_ok=True)
 
     for chapter in summary.chapter_summaries:
-        path = chapter_dir / _chapter_file_name(chapter)
-        path.write_text(_render_chapter_markdown(chapter), encoding="utf-8")
+        save_chapter_summary(summary.book_title, chapter, root_dir=root)
 
     for character in summary.character_summaries:
         path = character_dir / _character_file_name(character)
@@ -255,6 +296,21 @@ def save_book_summary(summary: BookSummary, *, root_dir: str | Path = "books") -
     setting_path.write_text(_render_setting_markdown(summary), encoding="utf-8")
 
     return book_dir
+
+
+def save_chapter_summary(
+    book_title: str,
+    chapter: ChapterSummary,
+    *,
+    root_dir: str | Path = "books",
+) -> Path:
+    root = Path(root_dir)
+    book_dir = root / _book_dir_name(book_title)
+    chapter_dir = book_dir / "chapter"
+    chapter_dir.mkdir(parents=True, exist_ok=True)
+    chapter_path = chapter_dir / _chapter_file_name(chapter)
+    chapter_path.write_text(_render_chapter_markdown(chapter), encoding="utf-8")
+    return chapter_path
 
 
 def ensure_book_directories(book_title: str, *, root_dir: str | Path = "books") -> Path:

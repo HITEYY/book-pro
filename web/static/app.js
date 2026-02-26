@@ -25,8 +25,18 @@ const MODEL_OPTIONS_BY_PROVIDER = {
 };
 
 const CUSTOM_MODEL_VALUE = "__custom__";
+const DEFAULT_UPLOAD_PARALLEL = 3;
+const MIN_UPLOAD_PARALLEL = 1;
+const MAX_UPLOAD_PARALLEL = 8;
 
 const STORAGE_KEY = "book-pro-panel-settings";
+
+function clampUploadParallel(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_UPLOAD_PARALLEL;
+  const rounded = Math.trunc(numeric);
+  return Math.max(MIN_UPLOAD_PARALLEL, Math.min(MAX_UPLOAD_PARALLEL, rounded));
+}
 
 const state = {
   page: 1,
@@ -45,6 +55,8 @@ const state = {
   settings: {
     selectedProvider: "open-ai",
     language: "ko",
+    uploadParallel: DEFAULT_UPLOAD_PARALLEL,
+    preciseAnalysis: false,
     models: { ...DEFAULT_MODEL_BY_PROVIDER },
     apiKeys: {
       "open-ai": "",
@@ -70,6 +82,8 @@ const el = {
   settingsCustomModelField: document.getElementById("settings-custom-model-field"),
   settingsCustomModelInput: document.getElementById("settings-custom-model-input"),
   settingsLanguageInput: document.getElementById("settings-language-input"),
+  settingsUploadParallelInput: document.getElementById("settings-upload-parallel-input"),
+  settingsPreciseAnalysisInput: document.getElementById("settings-precise-analysis-input"),
   apiKeyOpenAi: document.getElementById("api-key-open-ai"),
   apiKeyAnthropic: document.getElementById("api-key-anthropic"),
   apiKeyOpenrouter: document.getElementById("api-key-openrouter"),
@@ -145,6 +159,8 @@ function createDefaultSettings() {
   return {
     selectedProvider: "open-ai",
     language: "ko",
+    uploadParallel: DEFAULT_UPLOAD_PARALLEL,
+    preciseAnalysis: false,
     models: { ...DEFAULT_MODEL_BY_PROVIDER },
     apiKeys: {
       "open-ai": "",
@@ -185,6 +201,8 @@ function loadSettingsFromStorage() {
     const parsed = JSON.parse(raw);
     const selectedProvider = normalizeProvider(parsed.selectedProvider || parsed.provider || "open-ai");
     const language = typeof parsed.language === "string" && parsed.language.trim() ? parsed.language.trim() : "ko";
+    const uploadParallel = clampUploadParallel(parsed.uploadParallel ?? parsed.maxParallel);
+    const preciseAnalysis = parsed.preciseAnalysis === true || parsed.preciseAnalysis === "true";
 
     const models = { ...DEFAULT_MODEL_BY_PROVIDER };
     if (parsed.models && typeof parsed.models === "object") {
@@ -215,6 +233,8 @@ function loadSettingsFromStorage() {
     state.settings = {
       selectedProvider,
       language,
+      uploadParallel,
+      preciseAnalysis,
       models,
       apiKeys,
     };
@@ -233,6 +253,9 @@ function persistSettings() {
       selectedProvider: provider,
       provider,
       language: state.settings.language,
+      uploadParallel: clampUploadParallel(state.settings.uploadParallel),
+      maxParallel: clampUploadParallel(state.settings.uploadParallel),
+      preciseAnalysis: Boolean(state.settings.preciseAnalysis),
       models: state.settings.models,
       model: state.settings.models[provider] || "",
       apiKeys: state.settings.apiKeys,
@@ -246,8 +269,12 @@ function renderSettingsSummary() {
   const providerLabel = PROVIDER_LABEL[provider] || provider;
   const model = state.settings.models[provider] || "";
   const hasKey = Boolean(state.settings.apiKeys[provider]);
+  const uploadParallel = clampUploadParallel(state.settings.uploadParallel);
+  const preciseText = state.settings.preciseAnalysis ? "ON" : "OFF";
 
-  el.settingsActiveSummary.textContent = `현재 기본값: ${providerLabel} / ${model || "모델 미설정"} / API Key ${hasKey ? "설정됨" : "미설정"}`;
+  el.settingsActiveSummary.textContent =
+    `현재 기본값: ${providerLabel} / ${model || "모델 미설정"} / ` +
+    `API Key ${hasKey ? "설정됨" : "미설정"} / 업로드 병렬 ${uploadParallel} / 정밀 분석 ${preciseText}`;
 }
 
 function ensureModelForProvider(provider) {
@@ -365,6 +392,8 @@ function renderSettingsForm() {
   el.settingsProviderSelect.value = provider;
   renderModelSelect(provider);
   el.settingsLanguageInput.value = state.settings.language || "ko";
+  el.settingsUploadParallelInput.value = String(clampUploadParallel(state.settings.uploadParallel));
+  el.settingsPreciseAnalysisInput.checked = Boolean(state.settings.preciseAnalysis);
 
   el.apiKeyOpenAi.value = state.settings.apiKeys["open-ai"] || "";
   el.apiKeyAnthropic.value = state.settings.apiKeys.anthropic || "";
@@ -383,6 +412,8 @@ function syncSettingsFromForm() {
 
   state.settings.selectedProvider = nextProvider;
   state.settings.language = el.settingsLanguageInput.value.trim() || "ko";
+  state.settings.uploadParallel = clampUploadParallel(el.settingsUploadParallelInput.value);
+  state.settings.preciseAnalysis = Boolean(el.settingsPreciseAnalysisInput.checked);
   state.settings.apiKeys["open-ai"] = el.apiKeyOpenAi.value.trim();
   state.settings.apiKeys.anthropic = el.apiKeyAnthropic.value.trim();
   state.settings.apiKeys.openrouter = el.apiKeyOpenrouter.value.trim();
@@ -421,15 +452,38 @@ function renderLibraryMetrics() {
   el.metricCompletedBooks.textContent = String(state.total);
 }
 
-function addPendingUpload(fileName) {
-  const id = `pending-${state.nextPendingId++}`;
+function generateUploadId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function findPendingUploadByUploadId(uploadId) {
+  return state.pendingUploads.find((item) => item.uploadId === uploadId) || null;
+}
+
+function addPendingUpload(fileName, options = {}) {
+  const id = options.id || `pending-${state.nextPendingId++}`;
   const row = {
     id,
+    uploadId: options.uploadId || generateUploadId(),
     fileName,
-    status: "queued",
-    progress: 0,
-    error: "",
+    displayName: options.displayName || fileName,
+    status: options.status || "queued",
+    progress: Number.isFinite(options.progress) ? options.progress : 0,
+    message: options.message || "업로드 대기 중",
+    bookTitle: options.bookTitle || "",
+    stage: options.stage || "queued",
+    chapterIndex: options.chapterIndex ?? null,
+    chapterTotal: options.chapterTotal ?? null,
+    chapterTitle: options.chapterTitle || "",
+    characterIndex: options.characterIndex ?? null,
+    characterTotal: options.characterTotal ?? null,
+    characterName: options.characterName || "",
+    error: options.error || "",
     timerId: null,
+    completionTimerId: null,
   };
   state.pendingUploads.unshift(row);
   renderLibraryMetrics();
@@ -452,8 +506,35 @@ function removePendingUpload(id) {
   if (row && row.timerId) {
     window.clearInterval(row.timerId);
   }
+  if (row && row.completionTimerId) {
+    window.clearTimeout(row.completionTimerId);
+  }
   renderLibraryMetrics();
   renderBooksTable(state.items);
+}
+
+function renderPendingMessage(item) {
+  if (item.error) return item.error;
+
+  if (item.stage === "chapter") {
+    const chapterIndex = item.chapterIndex;
+    const chapterTotal = item.chapterTotal;
+    const chapterTitle = item.chapterTitle || "";
+    if (chapterIndex && chapterTotal) {
+      return `챕터 ${chapterIndex}/${chapterTotal} ${chapterTitle ? `- ${chapterTitle}` : ""}`;
+    }
+  }
+
+  if (item.stage === "character") {
+    const characterIndex = item.characterIndex;
+    const characterTotal = item.characterTotal;
+    const characterName = item.characterName || "";
+    if (characterIndex && characterTotal) {
+      return `캐릭터 ${characterIndex}/${characterTotal} ${characterName ? `- ${characterName}` : ""}`;
+    }
+  }
+
+  return item.message || "-";
 }
 
 function setUploading(isUploading) {
@@ -507,13 +588,14 @@ function renderBooksTable(items) {
 
       return `
         <tr class="pending-row">
-          <td>${escapeHtml(item.fileName)}</td>
+          <td>${escapeHtml(item.bookTitle || item.displayName || item.fileName)}</td>
           <td>
             <span class="status-chip ${statusClass}">${statusLabel}</span>
             <div class="progress-track">
               <div class="progress-fill" style="width:${Math.max(0, Math.min(item.progress || 0, 100))}%"></div>
             </div>
             <div class="progress-text">${Math.round(item.progress || 0)}%</div>
+            <div class="progress-text">${escapeHtml(renderPendingMessage(item))}</div>
             ${item.error ? `<div class="error-text">${escapeHtml(item.error)}</div>` : ""}
           </td>
           <td>-</td>
@@ -525,12 +607,24 @@ function renderBooksTable(items) {
     })
     .join("");
 
+  const processingTitles = new Set(
+    state.pendingUploads
+      .filter((item) => item.status === "queued" || item.status === "processing")
+      .map((item) => (item.bookTitle || "").trim())
+      .filter((title) => title.length > 0),
+  );
+
   const savedRows = items
+    .filter((item) => !processingTitles.has((item.book_title || "").trim()))
     .map(
       (item) => `
       <tr>
         <td>${escapeHtml(item.book_title)}</td>
-        <td><span class="status-chip status-completed">${escapeHtml(item.status)}</span></td>
+        <td>
+          <span class="status-chip ${item.status === "processing" ? "status-processing" : "status-completed"}">
+            ${escapeHtml(item.status)}
+          </span>
+        </td>
         <td>${escapeHtml(formatDate(item.updated_at))}</td>
         <td>${item.chapter_count}</td>
         <td>${item.character_count}</td>
@@ -705,55 +799,159 @@ function getRunConfig() {
   const model = state.settings.models[provider] || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
   const apiKey = state.settings.apiKeys[provider] || "";
   const language = state.settings.language || "ko";
-
-  if (!apiKey) {
-    throw new Error(`${PROVIDER_LABEL[provider]} API Key를 Settings 페이지에서 입력하세요.`);
-  }
-
-  return { provider, model, apiKey, language };
+  const uploadParallel = clampUploadParallel(state.settings.uploadParallel);
+  const preciseAnalysis = Boolean(state.settings.preciseAnalysis);
+  return { provider, model, apiKey, language, uploadParallel, preciseAnalysis };
 }
 
 function buildSingleUploadFormData(file, config) {
   const formData = new FormData();
   formData.append("file", file);
+  if (config.uploadId) formData.append("upload_id", config.uploadId);
   formData.append("provider", config.provider);
   formData.append("language", config.language);
+  formData.append("precise_analysis", String(Boolean(config.preciseAnalysis)));
   if (config.model) formData.append("model", config.model);
   if (config.apiKey) formData.append("api_key", config.apiKey);
   return formData;
 }
 
-async function uploadSingleFile(file, config, pendingRow) {
-  updatePendingUpload(pendingRow.id, { status: "processing", progress: 6, error: "" });
+function scheduleCompletedCleanup(pendingRow) {
+  if (pendingRow.completionTimerId) return;
+  const completionTimerId = window.setTimeout(async () => {
+    removePendingUpload(pendingRow.id);
+    try {
+      await loadLibrary({ autoOpenFirst: false });
+    } catch (_error) {
+      // 라이브러리 갱신 실패는 다음 갱신에서 복구된다.
+    }
+  }, 1200);
+  updatePendingUpload(pendingRow.id, { completionTimerId });
+}
 
-  const timerId = window.setInterval(() => {
-    const target = (pendingRow.progress || 0) + Math.floor(Math.random() * 7) + 2;
-    updatePendingUpload(pendingRow.id, { progress: Math.min(target, 92) });
-  }, 700);
+function startProgressPolling(pendingRow) {
+  if (pendingRow.timerId) {
+    return () => {};
+  }
 
+  let stopped = false;
+  let timerId = null;
+
+  const stop = () => {
+    stopped = true;
+    if (timerId) {
+      window.clearInterval(timerId);
+      timerId = null;
+    }
+    updatePendingUpload(pendingRow.id, { timerId: null });
+  };
+
+  const poll = async () => {
+    if (stopped) return;
+    try {
+      const payload = await fetchJson(`/uploads/${encodeURIComponent(pendingRow.uploadId)}/progress`);
+      const patch = {
+        status: payload.status || "processing",
+        progress: Number.isFinite(payload.progress) ? payload.progress : 0,
+        message: payload.message || "",
+        stage: payload.stage || "processing",
+        error: payload.error || "",
+        chapterIndex: payload.chapter_index ?? null,
+        chapterTotal: payload.chapter_total ?? null,
+        chapterTitle: payload.chapter_title || "",
+        characterIndex: payload.character_index ?? null,
+        characterTotal: payload.character_total ?? null,
+        characterName: payload.character_name || "",
+      };
+
+      if (typeof payload.book_title === "string" && payload.book_title.trim()) {
+        patch.bookTitle = payload.book_title.trim();
+        patch.displayName = payload.book_title.trim();
+      }
+
+      updatePendingUpload(pendingRow.id, patch);
+
+      if (payload.status === "completed") {
+        stop();
+        scheduleCompletedCleanup(pendingRow);
+        return;
+      }
+      if (payload.status === "failed") {
+        stop();
+      }
+    } catch (_error) {
+      // Upload 시작 직후에는 progress 레코드가 아직 없을 수 있어 다음 폴링에서 재시도한다.
+    }
+  };
+
+  timerId = window.setInterval(() => {
+    void poll();
+  }, 800);
   updatePendingUpload(pendingRow.id, { timerId });
+  void poll();
+
+  return stop;
+}
+
+async function uploadSingleFile(file, config, pendingRow) {
+  updatePendingUpload(pendingRow.id, {
+    status: "processing",
+    progress: 1,
+    message: "업로드 시작",
+    error: "",
+  });
+  const stopPolling = startProgressPolling(pendingRow);
 
   try {
-    const formData = buildSingleUploadFormData(file, config);
+    const formData = buildSingleUploadFormData(file, { ...config, uploadId: pendingRow.uploadId });
     const payload = await fetchJson("/summaries/from-epub", {
       method: "POST",
       body: formData,
     });
 
-    window.clearInterval(timerId);
-    updatePendingUpload(pendingRow.id, { status: "completed", progress: 100, timerId: null });
-    window.setTimeout(() => removePendingUpload(pendingRow.id), 1200);
+    stopPolling();
+    updatePendingUpload(pendingRow.id, {
+      status: "completed",
+      progress: 100,
+      stage: "done",
+      message: "요약 완료",
+      timerId: null,
+    });
+    scheduleCompletedCleanup(pendingRow);
     return { ok: true, payload };
   } catch (error) {
-    window.clearInterval(timerId);
+    stopPolling();
     updatePendingUpload(pendingRow.id, {
       status: "failed",
       progress: 100,
+      stage: "failed",
+      message: "요약 실패",
       error: error.message || "요약 실패",
       timerId: null,
     });
     return { ok: false, error };
   }
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const size = Math.max(1, Math.min(limit, items.length || 1));
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function runner() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) {
+        return;
+      }
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  const workers = Array.from({ length: size }, () => runner());
+  await Promise.all(workers);
+  return results;
 }
 
 async function uploadFiles(files) {
@@ -771,26 +969,95 @@ async function uploadFiles(files) {
 
   let successCount = 0;
   let failureCount = 0;
+  let firstErrorMessage = "";
 
   try {
     setUploading(true);
 
-    for (let i = 0; i < files.length; i += 1) {
-      const result = await uploadSingleFile(files[i], config, pendingRows[i]);
+    const results = await runWithConcurrency(
+      files,
+      Math.min(clampUploadParallel(config.uploadParallel), files.length),
+      async (file, index) => uploadSingleFile(file, config, pendingRows[index]),
+    );
+
+    for (const result of results) {
       if (result.ok) {
         successCount += 1;
-        await loadLibrary({ autoOpenFirst: false });
       } else {
         failureCount += 1;
+        if (!firstErrorMessage) {
+          firstErrorMessage = result.error?.message || "요약 실패";
+        }
       }
     }
 
-    showToast(`완료 ${successCount}권 / 실패 ${failureCount}권`, failureCount > 0);
+    if (successCount > 0) {
+      await loadLibrary({ autoOpenFirst: false });
+    }
+
+    const summaryMessage =
+      failureCount > 0 && firstErrorMessage
+        ? `완료 ${successCount}권 / 실패 ${failureCount}권 - ${firstErrorMessage}`
+        : `완료 ${successCount}권 / 실패 ${failureCount}권`;
+    showToast(summaryMessage, failureCount > 0);
     if (successCount > 0) switchView("library");
   } catch (error) {
     showToast(error.message || "업로드 실패", true);
   } finally {
     setUploading(false);
+  }
+}
+
+async function restoreActiveUploads() {
+  let payload;
+  try {
+    payload = await fetchJson("/uploads/active");
+  } catch (_error) {
+    return;
+  }
+
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return;
+  }
+
+  for (const row of payload) {
+    if (!row || typeof row !== "object") continue;
+    const uploadId = typeof row.upload_id === "string" ? row.upload_id.trim() : "";
+    if (!uploadId) continue;
+
+    const status = typeof row.status === "string" ? row.status : "queued";
+    if (status !== "queued" && status !== "processing") continue;
+
+    const fileName =
+      typeof row.file_name === "string" && row.file_name.trim() ? row.file_name.trim() : "unknown.epub";
+    const bookTitle =
+      typeof row.book_title === "string" && row.book_title.trim() ? row.book_title.trim() : "";
+    const options = {
+      uploadId,
+      status,
+      progress: Number.isFinite(row.progress) ? row.progress : 0,
+      message: row.message || "",
+      stage: row.stage || "queued",
+      error: row.error || "",
+      bookTitle,
+      displayName: bookTitle || fileName,
+      chapterIndex: row.chapter_index ?? null,
+      chapterTotal: row.chapter_total ?? null,
+      chapterTitle: row.chapter_title || "",
+      characterIndex: row.character_index ?? null,
+      characterTotal: row.character_total ?? null,
+      characterName: row.character_name || "",
+    };
+
+    const existing = findPendingUploadByUploadId(uploadId);
+    if (existing) {
+      updatePendingUpload(existing.id, options);
+      startProgressPolling(existing);
+      continue;
+    }
+
+    const pendingRow = addPendingUpload(fileName, options);
+    startProgressPolling(pendingRow);
   }
 }
 
@@ -815,6 +1082,14 @@ function bindSettingsEvents() {
   });
 
   el.settingsLanguageInput.addEventListener("change", () => {
+    syncSettingsFromForm();
+  });
+
+  el.settingsUploadParallelInput.addEventListener("change", () => {
+    syncSettingsFromForm();
+  });
+
+  el.settingsPreciseAnalysisInput.addEventListener("change", () => {
     syncSettingsFromForm();
   });
 
@@ -891,6 +1166,7 @@ async function init() {
   bindEvents();
   setTab("chapter");
   await fetchProviderModels(state.settings.selectedProvider, { force: true, silent: true });
+  await restoreActiveUploads();
 
   try {
     await loadLibrary();

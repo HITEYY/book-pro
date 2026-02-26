@@ -9,10 +9,28 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_chapter_prompt(*, chapter_title: str, chapter_text: str, language: str) -> str:
+def build_chapter_prompt(
+    *,
+    chapter_title: str,
+    chapter_text: str,
+    language: str,
+    precise_analysis: bool = False,
+) -> str:
+    precise_note = (
+        "정밀 분석 모드다. 챕터에 등장한 인물별로 이 장에서 드러난 특징을 character_traits에 반드시 정리하라."
+        if precise_analysis
+        else "정밀 분석 모드가 아니므로 character_traits는 생략하거나 빈 배열로 반환해도 된다."
+    )
+    precise_schema = (
+        ',\n  "character_traits": [\n'
+        '    {"character": "인물명", "traits": ["이 챕터에서 드러난 특징1", "특징2"]}\n'
+        "  ]"
+    )
+
     return f"""
 다음은 소설/서사 텍스트의 챕터 내용이다.
 요약 결과는 반드시 {language}로 작성하라.
+{precise_note}
 
 [챕터 제목]
 {chapter_title}
@@ -26,7 +44,7 @@ def build_chapter_prompt(*, chapter_title: str, chapter_text: str, language: str
   "key_events": ["핵심 사건 1", "핵심 사건 2"],
   "character_events": [
     {{"character": "인물명", "event": "무슨 일이 일어났는지", "impact": "해당 인물에 준 영향"}}
-  ]
+  ]{precise_schema}
 }}
 """.strip()
 
@@ -38,6 +56,14 @@ def _chapter_compact_lines(chapter_summaries: Iterable[ChapterSummary]) -> str:
             f"챕터 {chapter.chapter_index} - {chapter.chapter_title}: {chapter.summary} | "
             f"사건={'; '.join(chapter.key_events[:5])}"
         )
+        if chapter.character_traits:
+            trait_rows: list[str] = []
+            for row in chapter.character_traits:
+                if not row.traits:
+                    continue
+                trait_rows.append(f"{row.character}({', '.join(row.traits[:4])})")
+            if trait_rows:
+                rows.append(f"  캐릭터 특징={'; '.join(trait_rows)}")
     return "\n".join(rows)
 
 
@@ -50,7 +76,7 @@ def build_character_prompt(
     compact = _chapter_compact_lines(chapter_summaries)
     return f"""
 책 제목: {book_title}
-아래 챕터 요약을 바탕으로 캐릭터 프로필을 추출하라.
+아래 챕터 요약과 챕터별 캐릭터 특징 관찰을 함께 사용해 캐릭터 프로필을 추출하라.
 결과는 반드시 {language}로 작성하라.
 
 [챕터 요약 모음]
@@ -69,6 +95,37 @@ def build_character_prompt(
       "traits": ["특징1", "특징2"]
     }}
   ]
+}}
+""".strip()
+
+
+def build_writing_style_prompt(
+    *,
+    book_title: str,
+    chapter_summaries: list[ChapterSummary],
+    language: str,
+) -> str:
+    compact = _chapter_compact_lines(chapter_summaries)
+    return f"""
+책 제목: {book_title}
+아래 정보를 바탕으로 작가의 필체를 분석하라.
+결과는 반드시 {language}로 작성하라.
+
+[챕터 요약/특징 모음]
+{compact}
+
+이어쓰기(후속 집필)에 쓸 수 있도록 문체 패턴을 구체적으로 정리하라.
+아래 JSON 스키마를 지켜라.
+{{
+  "summary": "필체 핵심 요약 (4~8문장)",
+  "tone": "문체 톤",
+  "sentence_style": "문장 길이/리듬/호흡 특징",
+  "diction": "어휘 선택 특징",
+  "perspective": "시점/서술 거리",
+  "pacing": "전개 속도/장면 전환",
+  "dialogue_style": "대사 운용 방식",
+  "imagery_and_devices": ["이미지/비유/반복 패턴"],
+  "continuation_guidelines": ["이어쓰기 가이드 1", "가이드 2"]
 }}
 """.strip()
 

@@ -9,12 +9,18 @@ class CharacterEvent(BaseModel):
     impact: str = Field(default="", description="사건이 캐릭터에 준 영향")
 
 
+class ChapterCharacterTrait(BaseModel):
+    character: str = Field(default="알 수 없음", description="해당 챕터에 등장한 캐릭터")
+    traits: List[str] = Field(default_factory=list, description="챕터 맥락에서 드러난 성격/행동 특징")
+
+
 class ChapterSummary(BaseModel):
     chapter_index: int
     chapter_title: str
     summary: str
     key_events: List[str] = Field(default_factory=list)
     character_events: List[CharacterEvent] = Field(default_factory=list)
+    character_traits: List[ChapterCharacterTrait] = Field(default_factory=list)
 
 
 class CharacterSummary(BaseModel):
@@ -37,11 +43,24 @@ class WorldSummary(BaseModel):
     themes: List[str] = Field(default_factory=list)
 
 
+class WritingStyleSummary(BaseModel):
+    summary: str
+    tone: str = Field(default="알 수 없음")
+    sentence_style: str = Field(default="알 수 없음")
+    diction: str = Field(default="알 수 없음")
+    perspective: str = Field(default="알 수 없음")
+    pacing: str = Field(default="알 수 없음")
+    dialogue_style: str = Field(default="알 수 없음")
+    imagery_and_devices: List[str] = Field(default_factory=list)
+    continuation_guidelines: List[str] = Field(default_factory=list)
+
+
 class BookSummary(BaseModel):
     book_title: str
     chapter_summaries: List[ChapterSummary] = Field(default_factory=list)
     character_summaries: List[CharacterSummary] = Field(default_factory=list)
     world_summary: WorldSummary
+    writing_style: WritingStyleSummary
 
 
 class SummarizeResponse(BaseModel):
@@ -103,3 +122,21 @@ class BookDetailResponse(BaseModel):
 class ProviderModelsResponse(BaseModel):
     provider: str
     models: List[str] = Field(default_factory=list)
+
+
+class UploadProgressResponse(BaseModel):
+    upload_id: str
+    file_name: str
+    book_title: str = ""
+    status: str
+    progress: int = 0
+    stage: str = "queued"
+    message: str = ""
+    chapter_index: int | None = None
+    chapter_total: int | None = None
+    chapter_title: str | None = None
+    character_index: int | None = None
+    character_total: int | None = None
+    character_name: str | None = None
+    error: str = ""
+    updated_at: str

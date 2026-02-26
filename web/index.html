@@ -184,8 +184,26 @@
                 <span>기본 Language</span>
                 <input id="settings-language-input" type="text" value="ko" />
               </label>
+              <label class="field">
+                <span>업로드 병렬 수</span>
+                <input
+                  id="settings-upload-parallel-input"
+                  type="number"
+                  min="1"
+                  max="8"
+                  step="1"
+                  value="3"
+                />
+              </label>
+              <label class="field">
+                <span>정밀 분석 사용</span>
+                <input id="settings-precise-analysis-input" type="checkbox" />
+              </label>
             </div>
-            <p class="settings-hint">Model은 리스트에서 선택합니다. 목록에 없으면 직접 입력 Model을 사용하세요.</p>
+            <p class="settings-hint">
+              Model은 리스트에서 선택합니다. 목록에 없으면 직접 입력 Model을 사용하세요. 업로드 병렬 수는 1~8 범위입니다.
+              정밀 분석을 켜면 챕터별 캐릭터 특징과 작가 필체 분석을 추가해 정확도를 높입니다.
+            </p>
           </section>
 
           <section class="panel">
