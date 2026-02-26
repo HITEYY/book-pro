@@ -23,15 +23,63 @@ def _extract_title(soup: BeautifulSoup, fallback: str) -> str:
     return fallback
 
 
+def _extract_book_title_from_metadata(book: epub.EpubBook) -> str:
+    candidates: list[str] = []
+
+    # Common metadata namespace variations used in EPUB files.
+    for namespace, key in (
+        ("DC", "title"),
+        ("dc", "title"),
+        ("DCTERMS", "title"),
+        ("OPF", "title"),
+        ("opf", "title"),
+    ):
+        try:
+            entries = book.get_metadata(namespace, key)
+        except Exception:  # noqa: BLE001
+            continue
+
+        for entry in entries or []:
+            raw = entry[0] if isinstance(entry, tuple) and entry else entry
+            if isinstance(raw, str):
+                normalized = _normalize_text(raw)
+                if normalized:
+                    candidates.append(normalized)
+
+    metadata = getattr(book, "metadata", None)
+    if isinstance(metadata, dict):
+        for namespace_payload in metadata.values():
+            if not isinstance(namespace_payload, dict):
+                continue
+            for key, entries in namespace_payload.items():
+                if str(key).lower() != "title":
+                    continue
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    raw = entry[0] if isinstance(entry, tuple) and entry else entry
+                    if isinstance(raw, str):
+                        normalized = _normalize_text(raw)
+                        if normalized:
+                            candidates.append(normalized)
+
+    raw_title = getattr(book, "title", None)
+    if isinstance(raw_title, str):
+        normalized = _normalize_text(raw_title)
+        if normalized:
+            candidates.append(normalized)
+
+    return candidates[0] if candidates else "Unknown title"
+
+
+def extract_epub_metadata_title(file_path: str | Path) -> str:
+    book = epub.read_epub(str(file_path))
+    return _extract_book_title_from_metadata(book)
+
+
 def parse_epub(file_path: str | Path, min_words: int = 80) -> BookContent:
     book = epub.read_epub(str(file_path))
-
-    title = "Unknown title"
-    titles = book.get_metadata("DC", "title")
-    if titles:
-        raw = titles[0][0]
-        if isinstance(raw, str) and raw.strip():
-            title = raw.strip()
+    title = _extract_book_title_from_metadata(book)
 
     chapters: list[Chapter] = []
     chapter_index = 1

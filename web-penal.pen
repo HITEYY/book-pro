@@ -1,0 +1,1463 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "bi8Au",
+      "x": 0,
+      "y": 0,
+      "name": "book-pro · Book Detail",
+      "clip": true,
+      "width": 1440,
+      "height": 960,
+      "fill": "#F2F2F2",
+      "children": [
+        {
+          "type": "frame",
+          "id": "hXrg9",
+          "name": "Sidebar",
+          "width": 280,
+          "height": "fill_container",
+          "fill": "#000000",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": 28,
+          "children": [
+            {
+              "type": "text",
+              "id": "biblh",
+              "name": "brandTitle",
+              "fill": "#FFFFFF",
+              "content": "book-pro",
+              "fontFamily": "Playfair Display",
+              "fontSize": 30,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "yoCPk",
+              "name": "brandSub",
+              "fill": "#999999",
+              "content": "EPUB AI Summary Studio",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "zKatT",
+              "name": "Navigation",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "HEETS",
+                  "name": "navOverview",
+                  "fill": "#999999",
+                  "content": "Library",
+                  "fontFamily": "Inter",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "3l76S",
+                  "name": "navChapter",
+                  "fill": "#FFFFFF",
+                  "content": "Book Detail",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "j9VRg",
+                  "name": "navCharacter",
+                  "fill": "#999999",
+                  "content": "Character Profile",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "tvZNl",
+                  "name": "navWorld",
+                  "fill": "#999999",
+                  "content": "Worldbuilding",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Oc4KN",
+              "name": "Upload Tip",
+              "width": "fill_container",
+              "fill": "#1A1A1A",
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "q2IIl",
+                  "name": "uploadBoxTitle",
+                  "fill": "#FFFFFF",
+                  "content": "현재 책: 1권",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "KU3qx",
+                  "name": "uploadBoxBody",
+                  "fill": "#999999",
+                  "content": "Supports chapter-level parsing and automatic extraction.",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ARPxf",
+          "name": "Main Panel",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#F2F2F2",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": 40,
+          "children": [
+            {
+              "type": "frame",
+              "id": "b0aOV",
+              "name": "Header",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "bPn9r",
+                  "name": "titleStackA",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "TsfNS",
+                      "name": "mainTitleA",
+                      "fill": "#000000",
+                      "content": "Summary Console",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 52,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "NnfBN",
+                      "name": "mainSubA",
+                      "fill": "#666666",
+                      "content": "EPUB 업로드 후 챕터·캐릭터·세계관 요약을 생성합니다.",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iJfv0",
+                  "name": "Header Actions",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nLK1f",
+                      "name": "modelPillA",
+                      "fill": "#FFFFFF",
+                      "gap": 8,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "nAO4Q",
+                          "name": "modelTextA",
+                          "fill": "#333333",
+                          "content": "Model: gpt-4.1-mini",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "zP5oL",
+                      "name": "uploadBtnA",
+                      "fill": "#000000",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MJIeO",
+                          "name": "uploadBtnTextA",
+                          "fill": "#FFFFFF",
+                          "content": "EPUB 업로드",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "AczCF",
+              "name": "Metric Row",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "wcTCn",
+                  "name": "Card 1",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "d0EXh",
+                      "name": "card1LabelB",
+                      "fill": "#666666",
+                      "content": "Chapters Parsed",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kmXwl",
+                      "name": "card1ValueB",
+                      "fill": "#000000",
+                      "content": "18",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zHeu4",
+                      "name": "card1MetaB",
+                      "fill": "#666666",
+                      "content": "+4 from last import",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DTwSQ",
+                  "name": "Card 2",
+                  "width": "fill_container",
+                  "fill": "#000000",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SBaKF",
+                      "name": "card2LabelB",
+                      "fill": "#999999",
+                      "content": "Characters Tracked",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "BNY3X",
+                      "name": "card2ValueB",
+                      "fill": "#FFFFFF",
+                      "content": "42",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zgvP2",
+                      "name": "card2MetaB",
+                      "fill": "#CCCCCC",
+                      "content": "voice + traits extracted",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ASIPd",
+                  "name": "Card 3",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "wpu6G",
+                      "name": "card3LabelB",
+                      "fill": "#666666",
+                      "content": "World Rules",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "cwyqs",
+                      "name": "card3ValueB",
+                      "fill": "#000000",
+                      "content": "12",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "xaTTC",
+                      "name": "card3MetaB",
+                      "fill": "#666666",
+                      "content": "constraints and lore points",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "nBqoK",
+                  "name": "Card 4",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "O6DEi",
+                      "name": "card4LabelB",
+                      "fill": "#666666",
+                      "content": "Processing",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DInJi",
+                      "name": "card4ValueB",
+                      "fill": "#000000",
+                      "content": "Ready",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 36,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "c2ygG",
+                      "name": "card4MetaB",
+                      "fill": "#666666",
+                      "content": "average 17s per EPUB",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JfAIU",
+              "name": "Results Row",
+              "width": "fill_container",
+              "height": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "cWrwx",
+                  "name": "Summary Board",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "NjLyd",
+                      "name": "tabsRowB",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "kpw01",
+                          "name": "tabChapterB",
+                          "fill": "#000000",
+                          "padding": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "0njuh",
+                              "name": "tabChapterTextB",
+                              "fill": "#FFFFFF",
+                              "content": "Chapter",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "1StmC",
+                          "name": "tabCharacterB",
+                          "fill": "#F2F2F2",
+                          "padding": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "eKgyP",
+                              "name": "tabCharacterTextB",
+                              "fill": "#666666",
+                              "content": "Character",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Nv5f2",
+                          "name": "tabWorldB",
+                          "fill": "#F2F2F2",
+                          "padding": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "LVv82",
+                              "name": "tabWorldTextB",
+                              "fill": "#666666",
+                              "content": "World",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PB64c",
+                      "name": "Chapter List",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "yhUnu",
+                          "name": "Chapter Item 1",
+                          "width": "fill_container",
+                          "fill": "#F8F8F8",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "padding": 16,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "P297d",
+                              "name": "chapter1TitleC",
+                              "fill": "#000000",
+                              "content": "Chapter 1 · The Salt Port",
+                              "fontFamily": "Playfair Display",
+                              "fontSize": 20,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "3ahg1",
+                              "name": "chapter1SummaryC",
+                              "fill": "#333333",
+                              "content": "Lina arrives at the flooded harbor and loses her passage token while trying to save her brother.",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "JUtEm",
+                              "name": "chapter1CharacterC",
+                              "fill": "#666666",
+                              "content": "Character impact: Lina forced into guild debt, Eran disappears.",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "5tcx3",
+                          "name": "Chapter Item 2",
+                          "width": "fill_container",
+                          "fill": "#F8F8F8",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "padding": 16,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ZQGk1",
+                              "name": "chapter2TitleC",
+                              "fill": "#000000",
+                              "content": "Chapter 2 · Glass District",
+                              "fontFamily": "Playfair Display",
+                              "fontSize": 20,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "zWW7p",
+                              "name": "chapter2SummaryC",
+                              "fill": "#333333",
+                              "content": "Rook bargains with the Archive Wardens and reveals the city runs on memory tariffs.",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "aigbt",
+                              "name": "chapter2CharacterC",
+                              "fill": "#666666",
+                              "content": "Character impact: Rook gains leverage but betrays his mentor.",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WFT3m",
+                  "name": "Insight Rail",
+                  "width": 340,
+                  "height": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WUUch",
+                      "name": "railTitleC",
+                      "fill": "#000000",
+                      "content": "Quick Insights",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "uVaIH",
+                      "name": "railSubC",
+                      "fill": "#666666",
+                      "content": "최신 실행 결과를 기반으로 핵심 인사이트를 제공합니다.",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BaL2q",
+                      "name": "Character Card",
+                      "width": "fill_container",
+                      "fill": "#F7F7F7",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ILAhV",
+                          "name": "characterCardTitleC",
+                          "fill": "#000000",
+                          "content": "Lina Voss · 19",
+                          "fontFamily": "Playfair Display",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "TsfoL",
+                          "name": "characterCardBodyC",
+                          "fill": "#333333",
+                          "content": "선상: idealist to survivor · 목소리: clipped, low · 특징: tide-mark scar, ritual notebook",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pTwCg",
+                      "name": "World Card",
+                      "width": "fill_container",
+                      "fill": "#F7F7F7",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "r8qex",
+                          "name": "worldCardTitleC",
+                          "fill": "#000000",
+                          "content": "World Rule",
+                          "fontFamily": "Playfair Display",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "sZEMC",
+                          "name": "worldCardBodyC",
+                          "fill": "#333333",
+                          "content": "Memory can be taxed, traded, and erased under harbor law. Black-market mnemonists break this rule.",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "03aMg",
+                      "name": "Generate Button",
+                      "width": "fill_container",
+                      "fill": "#000000",
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RMwLc",
+                          "name": "runButtonTextC",
+                          "fill": "#FFFFFF",
+                          "content": "새 요약 생성",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Clqs9",
+                      "name": "Status",
+                      "fill": "#E5E5E5",
+                      "padding": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "8VfWZ",
+                          "name": "statusTextC",
+                          "fill": "#333333",
+                          "content": "Last run: 4m ago",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "0JBOM",
+      "x": 1560,
+      "y": 0,
+      "name": "book-pro · Library",
+      "clip": true,
+      "width": 1440,
+      "height": 960,
+      "fill": "#F2F2F2",
+      "children": [
+        {
+          "type": "frame",
+          "id": "sRmBs",
+          "name": "Sidebar",
+          "width": 743,
+          "height": "fill_container",
+          "fill": "#000000",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": 28,
+          "children": [
+            {
+              "type": "text",
+              "id": "JRu5h",
+              "name": "libraryBrand",
+              "fill": "#FFFFFF",
+              "content": "book-pro",
+              "fontFamily": "Playfair Display",
+              "fontSize": 30,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "Z27oH",
+              "name": "librarySub",
+              "fill": "#999999",
+              "content": "Multi-book Summary Hub",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "uvjOk",
+              "name": "Navigation",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "WBvFg",
+                  "name": "libraryNav1",
+                  "fill": "#FFFFFF",
+                  "content": "Library",
+                  "fontFamily": "Inter",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "kMxvD",
+                  "name": "libraryNav2",
+                  "fill": "#999999",
+                  "content": "Book Detail",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "r4B2y",
+                  "name": "libraryNav3",
+                  "fill": "#999999",
+                  "content": "Batch Queue",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "MJOt9",
+              "name": "Library Tip",
+              "width": "fill_container",
+              "fill": "#1A1A1A",
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "f5FkH",
+                  "name": "libraryHintTitle",
+                  "fill": "#FFFFFF",
+                  "content": "여러 EPUB 업로드",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "pkXge",
+                  "name": "libraryHintBody",
+                  "fill": "#999999",
+                  "content": "책마다 챕터/캐릭터/세계관 요약을 별도 저장합니다.",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "F6UYk",
+          "name": "Main Panel",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#F2F2F2",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": 40,
+          "children": [
+            {
+              "type": "frame",
+              "id": "b6QOb",
+              "name": "Header",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "WQlpZ",
+                  "name": "libraryTitleStack",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OjsTS",
+                      "name": "libraryTitle",
+                      "fill": "#000000",
+                      "content": "Books Library",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 52,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tfLeZ",
+                      "name": "librarySubtitle",
+                      "fill": "#666666",
+                      "content": "여러 권을 등록하고, 책별 요약 페이지로 이동하세요.",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "5eimw",
+                  "name": "Header Actions",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "c5yeY",
+                      "name": "importBtn",
+                      "fill": "#000000",
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vp3Cv",
+                          "name": "importBtnText",
+                          "fill": "#FFFFFF",
+                          "content": "EPUB 여러권 업로드",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RYSHz",
+              "name": "Stats",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "hJeba",
+                  "name": "Total Books",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "rqmVp",
+                      "name": "totalBooksLabel",
+                      "fill": "#666666",
+                      "content": "등록된 책",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "oagd2",
+                      "name": "totalBooksValue",
+                      "fill": "#000000",
+                      "content": "27",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "SLf9m",
+                      "name": "totalBooksMeta",
+                      "fill": "#666666",
+                      "content": "이번 주 +6권",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qApUn",
+                  "name": "Processing",
+                  "width": "fill_container",
+                  "fill": "#000000",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "14nKC",
+                      "name": "processingLabel",
+                      "fill": "#999999",
+                      "content": "처리 중",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "yGMvZ",
+                      "name": "processingValue",
+                      "fill": "#FFFFFF",
+                      "content": "5",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ZNzd7",
+                      "name": "processingMeta",
+                      "fill": "#CCCCCC",
+                      "content": "평균 2분/권",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "1XYHq",
+                  "name": "Completed",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PEp6a",
+                      "name": "completedLabel",
+                      "fill": "#666666",
+                      "content": "완료",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "KTqxy",
+                      "name": "completedValue",
+                      "fill": "#000000",
+                      "content": "22",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "LVoFD",
+                      "name": "completedMeta",
+                      "fill": "#666666",
+                      "content": "요약 열람 가능",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "478Pv",
+              "name": "Books Board",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 20,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ouTWv",
+                  "name": "boardTitle",
+                  "fill": "#000000",
+                  "content": "책 목록",
+                  "fontFamily": "Playfair Display",
+                  "fontSize": 24,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "FHTtJ",
+                  "name": "Board Tools",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "yDHyB",
+                      "name": "searchBox",
+                      "fill": "#F2F2F2",
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vUeVz",
+                          "name": "searchText",
+                          "fill": "#999999",
+                          "content": "책 제목 검색",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "oSrIz",
+                      "name": "chipProcessing",
+                      "fill": "#E5E5E5",
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "XRXl5",
+                          "name": "chipProcessingText",
+                          "fill": "#333333",
+                          "content": "처리중만",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "3JVG4",
+                  "name": "Books Header",
+                  "width": "fill_container",
+                  "fill": "#F8F8F8",
+                  "gap": 12,
+                  "padding": 10,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "P33IC",
+                      "name": "headerTitle",
+                      "fill": "#333333",
+                      "content": "제목",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sMEyU",
+                      "name": "headerStatus",
+                      "fill": "#333333",
+                      "content": "상태",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "WO750",
+                      "name": "headerUpdated",
+                      "fill": "#333333",
+                      "content": "최근 업데이트",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "UZTXd",
+                      "name": "headerChapters",
+                      "fill": "#333333",
+                      "content": "챕터 수",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "r4MZ4",
+                      "name": "headerAction",
+                      "fill": "#333333",
+                      "content": "액션",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Efh5h",
+                  "name": "Books Rows",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "zRIVj",
+                      "name": "Row 1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "gap": 12,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "byPC1",
+                          "name": "row1Title",
+                          "fill": "#000000",
+                          "content": "바람의 항구",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "omBQq",
+                          "name": "row1Status",
+                          "fill": "#000000",
+                          "content": "완료",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Fdvcu",
+                          "name": "row1Updated",
+                          "fill": "#666666",
+                          "content": "2분 전",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "MEWth",
+                          "name": "row1Chapters",
+                          "fill": "#333333",
+                          "content": "18",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "KoxfB",
+                          "name": "row1Action",
+                          "fill": "#000000",
+                          "content": "열기",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EIjMr",
+                      "name": "Row 2",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "gap": 12,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "PEEqj",
+                          "name": "row2Title",
+                          "fill": "#000000",
+                          "content": "유리 도시 연대기",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "hyHey",
+                          "name": "row2Status",
+                          "fill": "#333333",
+                          "content": "처리 중",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "wPmwt",
+                          "name": "row2Updated",
+                          "fill": "#666666",
+                          "content": "방금",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "23jQK",
+                          "name": "row2Chapters",
+                          "fill": "#333333",
+                          "content": "24",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "IxEU0",
+                          "name": "row2Action",
+                          "fill": "#000000",
+                          "content": "진행 보기",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rJ7Ok",
+                      "name": "Row 3",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "gap": 12,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KUkqX",
+                          "name": "row3Title",
+                          "fill": "#000000",
+                          "content": "황혼의 숲",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "s6MKQ",
+                          "name": "row3Status",
+                          "fill": "#000000",
+                          "content": "오류",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "j5F5V",
+                          "name": "row3Updated",
+                          "fill": "#666666",
+                          "content": "1시간 전",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "VurXF",
+                          "name": "row3Chapters",
+                          "fill": "#333333",
+                          "content": "9",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pPla0",
+                          "name": "row3Action",
+                          "fill": "#000000",
+                          "content": "재시도",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "O3BwN",
+                  "name": "Pagination",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ok9pM",
+                      "name": "pageInfo",
+                      "fill": "#666666",
+                      "content": "페이지 1 / 6",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dKpmM",
+                      "name": "prevBtn",
+                      "fill": "#F2F2F2",
+                      "padding": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "9KHgy",
+                          "name": "prevText",
+                          "fill": "#333333",
+                          "content": "이전",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "5TqcJ",
+                      "name": "pageCurrent",
+                      "fill": "#000000",
+                      "padding": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "5VcuD",
+                          "name": "pageCurrentText",
+                          "fill": "#FFFFFF",
+                          "content": "1",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vyxvC",
+                      "name": "nextBtn",
+                      "fill": "#F2F2F2",
+                      "padding": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "x3O1a",
+                          "name": "nextText",
+                          "fill": "#333333",
+                          "content": "다음",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

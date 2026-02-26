@@ -74,6 +74,8 @@ curl -X POST "http://127.0.0.1:8000/summaries/from-epubs" \
 `Settings`에서 Provider를 선택하면 모델 목록을 해당 Provider API에서 자동 조회합니다.
 조회 실패 시에는 내장 기본 모델 목록을 fallback으로 사용합니다.
 EPUB 업로드를 시작하면 Library 목록에 즉시 표시되고, `요약 중` 상태와 진행 바가 함께 갱신됩니다.
+업로드가 시작되면 `books/book-[책이름]/chapter`, `books/book-[책이름]/character` 폴더가 자동 생성됩니다.
+동시에 `books/book-[책이름]/` 아래에 원본 EPUB 파일도 자동 저장됩니다.
 
 ## 응답 구조
 

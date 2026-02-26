@@ -1,4 +1,5 @@
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,12 @@ def _chapter_file_name(chapter: ChapterSummary) -> str:
 
 def _character_file_name(character: CharacterSummary) -> str:
     return f"{_slug_part(character.name, 'unknown-character')}.md"
+
+
+def _epub_file_name(original_filename: str, fallback_base: str) -> str:
+    raw_stem = Path(original_filename or "").stem
+    safe_stem = _slug_part(raw_stem, fallback_base)
+    return f"{safe_stem}.epub"
 
 
 def _render_character_events(rows: list[CharacterEvent]) -> str:
@@ -248,3 +255,25 @@ def save_book_summary(summary: BookSummary, *, root_dir: str | Path = "books") -
     setting_path.write_text(_render_setting_markdown(summary), encoding="utf-8")
 
     return book_dir
+
+
+def ensure_book_directories(book_title: str, *, root_dir: str | Path = "books") -> Path:
+    root = Path(root_dir)
+    book_dir = root / _book_dir_name(book_title)
+    (book_dir / "chapter").mkdir(parents=True, exist_ok=True)
+    (book_dir / "character").mkdir(parents=True, exist_ok=True)
+    return book_dir
+
+
+def save_uploaded_epub(
+    book_title: str,
+    *,
+    source_file_path: str | Path,
+    original_filename: str,
+    root_dir: str | Path = "books",
+) -> Path:
+    book_dir = ensure_book_directories(book_title, root_dir=root_dir)
+    target_name = _epub_file_name(original_filename, fallback_base=book_title or "book")
+    target_path = book_dir / target_name
+    shutil.copyfile(str(source_file_path), str(target_path))
+    return target_path

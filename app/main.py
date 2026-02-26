@@ -18,7 +18,13 @@ from app.schemas import (
     SummarizeResponse,
 )
 from app.provider_models import fetch_provider_models
-from app.storage import list_books, read_book_detail, save_book_summary
+from app.storage import (
+    ensure_book_directories,
+    list_books,
+    read_book_detail,
+    save_book_summary,
+    save_uploaded_epub,
+)
 from app.summarizer import MultiProviderBookSummarizer, normalize_provider
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -128,6 +134,13 @@ async def _summarize_upload(
             temp_path = tmp.name
 
         book = parse_epub(temp_path)
+        ensure_book_directories(book.title, root_dir=output_dir)
+        save_uploaded_epub(
+            book.title,
+            source_file_path=temp_path,
+            original_filename=file.filename,
+            root_dir=output_dir,
+        )
         book.chapters = book.chapters[:chapter_limit]
 
         summary = summarizer.summarize(book, language=language)

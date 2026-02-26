@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any
 
 from openai import OpenAI
@@ -49,6 +50,9 @@ _PROVIDER_DEFAULT_MODEL = {
     "venice": "venice-uncensored",
     "kilo-code": "anthropic/claude-sonnet-4.5",
 }
+
+logger = logging.getLogger("book_pro")
+logger.setLevel(logging.INFO)
 
 
 class _ChapterPayload(BaseModel):
@@ -144,21 +148,96 @@ class MultiProviderBookSummarizer:
         self.model = (model or "").strip() or resolve_default_model(self.provider)
 
     def summarize(self, book: BookContent, *, language: str = "ko") -> BookSummary:
+        chapter_count = len(book.chapters)
+        total_steps = max(1, chapter_count + 2)
+        logger.info(
+            "[요약 시작] 책='%s' provider='%s' model='%s' chapters=%d",
+            book.title,
+            self.provider,
+            self.model,
+            chapter_count,
+        )
+
         chapter_summaries: list[ChapterSummary] = []
 
-        for chapter in book.chapters:
+        for index, chapter in enumerate(book.chapters, start=1):
+            chapter_start = int(((index - 1) / total_steps) * 100)
+            logger.info(
+                "[요약 진행률 %3d%%] 책='%s' 챕터 요약 중 (%d/%d): %s",
+                chapter_start,
+                book.title,
+                index,
+                chapter_count,
+                chapter.title,
+            )
             chapter_summaries.append(self._summarize_chapter(chapter, language=language))
+            chapter_done = int((index / total_steps) * 100)
+            logger.info(
+                "[요약 진행률 %3d%%] 책='%s' 챕터 요약 완료 (%d/%d): %s",
+                chapter_done,
+                book.title,
+                index,
+                chapter_count,
+                chapter.title,
+            )
 
+        character_step = chapter_count + 1
+        character_start = int(((character_step - 1) / total_steps) * 100)
+        logger.info(
+            "[요약 진행률 %3d%%] 책='%s' 캐릭터 요약 중",
+            character_start,
+            book.title,
+        )
         character_summaries = self._summarize_characters(
             book_title=book.title,
             chapter_summaries=chapter_summaries,
             language=language,
+        )
+        character_done = int((character_step / total_steps) * 100)
+        if character_summaries:
+            total_characters = len(character_summaries)
+            for index, character in enumerate(character_summaries, start=1):
+                if total_characters == 1:
+                    progress = character_done
+                else:
+                    progress = int(
+                        character_start
+                        + ((character_done - character_start) * index / total_characters)
+                    )
+                logger.info(
+                    "[요약 진행률 %3d%%] 책='%s' 캐릭터 처리 중 (%d/%d): %s",
+                    progress,
+                    book.title,
+                    index,
+                    total_characters,
+                    character.name,
+                )
+        logger.info(
+            "[요약 진행률 %3d%%] 책='%s' 캐릭터 요약 완료 (총 %d명)",
+            character_done,
+            book.title,
+            len(character_summaries),
+        )
+
+        world_step = chapter_count + 2
+        world_start = int(((world_step - 1) / total_steps) * 100)
+        logger.info(
+            "[요약 진행률 %3d%%] 책='%s' 세계관 요약 중",
+            world_start,
+            book.title,
         )
         world_summary = self._summarize_world(
             book_title=book.title,
             chapter_summaries=chapter_summaries,
             language=language,
         )
+        world_done = int((world_step / total_steps) * 100)
+        logger.info(
+            "[요약 진행률 %3d%%] 책='%s' 세계관 요약 완료",
+            world_done,
+            book.title,
+        )
+        logger.info("[요약 완료] 책='%s'", book.title)
 
         return BookSummary(
             book_title=book.title,

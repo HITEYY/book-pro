@@ -458,19 +458,6 @@ function removePendingUpload(id) {
 
 function setUploading(isUploading) {
   state.uploading = isUploading;
-  el.uploadBooksBtn.disabled = isUploading;
-  el.uploadSingleBtn.disabled = isUploading;
-  el.generateFromDetailBtn.disabled = isUploading;
-
-  if (isUploading) {
-    el.uploadBooksBtn.textContent = "업로드/요약 중...";
-    el.uploadSingleBtn.textContent = "업로드/요약 중...";
-    el.generateFromDetailBtn.textContent = "요약 생성 중...";
-  } else {
-    el.uploadBooksBtn.textContent = "EPUB 여러권 업로드";
-    el.uploadSingleBtn.textContent = "EPUB 업로드";
-    el.generateFromDetailBtn.textContent = "새 요약 생성";
-  }
 }
 
 async function fetchJson(url, options) {
@@ -705,7 +692,6 @@ async function openBook(slug, { switchToDetail = false } = {}) {
 }
 
 function openFilePicker(mode) {
-  if (state.uploading) return;
   state.pendingUploadMode = mode;
   el.fileInput.multiple = mode === "multi";
   el.fileInput.value = "";
