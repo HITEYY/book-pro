@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>book-pro Web Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <div class="brand">book-pro</div>
+          <div class="brand-sub">Multi-book Summary Hub</div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" id="nav-library" type="button">Library</button>
+          <button class="nav-item" id="nav-detail" type="button">Book Detail</button>
+          <button class="nav-item" id="nav-settings" type="button">Settings</button>
+        </nav>
+
+        <div class="tip-box">
+          <div class="tip-title">EPUB 다권 업로드</div>
+          <p class="tip-body">여러 권을 한번에 업로드하고 책별 챕터/캐릭터/세계관 요약을 저장합니다.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section id="view-library" class="view active">
+          <header class="view-header">
+            <div>
+              <h1 class="title">Books Library</h1>
+              <p class="subtitle">여러 권을 등록하고 책별 상세 요약 페이지로 이동하세요.</p>
+            </div>
+            <div class="header-actions">
+              <button id="upload-books-btn" class="btn btn-primary" type="button">EPUB 여러권 업로드</button>
+            </div>
+          </header>
+
+          <section class="metrics" id="library-metrics">
+            <article class="metric-card">
+              <div class="metric-label">등록된 책</div>
+              <div class="metric-value" id="metric-total-books">0</div>
+              <div class="metric-meta">라이브러리 전체</div>
+            </article>
+            <article class="metric-card metric-card-dark">
+              <div class="metric-label">처리 중</div>
+              <div class="metric-value" id="metric-processing-books">0</div>
+              <div class="metric-meta">현재 실행중</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-label">완료</div>
+              <div class="metric-value" id="metric-completed-books">0</div>
+              <div class="metric-meta">열람 가능</div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">책 목록</h2>
+            </div>
+
+            <div class="table-wrap">
+              <table class="book-table">
+                <thead>
+                  <tr>
+                    <th>제목</th>
+                    <th>상태</th>
+                    <th>최근 업데이트</th>
+                    <th>챕터</th>
+                    <th>캐릭터</th>
+                    <th>액션</th>
+                  </tr>
+                </thead>
+                <tbody id="books-table-body"></tbody>
+              </table>
+            </div>
+
+            <div class="pagination">
+              <div id="library-page-info">페이지 1 / 1</div>
+              <div class="pagination-actions">
+                <button id="prev-page-btn" class="btn btn-ghost" type="button">이전</button>
+                <button id="next-page-btn" class="btn btn-ghost" type="button">다음</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-detail" class="view">
+          <header class="view-header">
+            <div>
+              <h1 class="title" id="detail-title">Book Detail</h1>
+              <p class="subtitle" id="detail-subtitle">Library에서 책을 선택하면 상세 요약이 표시됩니다.</p>
+            </div>
+            <div class="header-actions">
+              <button id="upload-single-btn" class="btn btn-primary" type="button">EPUB 업로드</button>
+            </div>
+          </header>
+
+          <section class="metrics">
+            <article class="metric-card">
+              <div class="metric-label">챕터</div>
+              <div class="metric-value" id="detail-chapter-count">0</div>
+              <div class="metric-meta">분석된 챕터 수</div>
+            </article>
+            <article class="metric-card metric-card-dark">
+              <div class="metric-label">캐릭터</div>
+              <div class="metric-value" id="detail-character-count">0</div>
+              <div class="metric-meta">추출된 캐릭터</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-label">최근 업데이트</div>
+              <div class="metric-value text-small" id="detail-updated-at">-</div>
+              <div class="metric-meta">저장 기준</div>
+            </article>
+          </section>
+
+          <section class="detail-layout">
+            <section class="panel detail-main">
+              <div class="tabs">
+                <button class="tab active" data-tab="chapter" type="button">Chapter</button>
+                <button class="tab" data-tab="character" type="button">Character</button>
+                <button class="tab" data-tab="world" type="button">World</button>
+              </div>
+
+              <div id="tab-chapter" class="tab-panel active"></div>
+              <div id="tab-character" class="tab-panel"></div>
+              <div id="tab-world" class="tab-panel"></div>
+            </section>
+
+            <aside class="panel detail-side">
+              <h2 class="panel-title">Quick Insights</h2>
+              <div id="insight-book-title" class="insight-item">책을 선택하세요.</div>
+              <div id="insight-book-stats" class="insight-item muted"></div>
+              <button id="generate-from-detail-btn" class="btn btn-primary full" type="button">
+                새 요약 생성
+              </button>
+            </aside>
+          </section>
+        </section>
+
+        <section id="view-settings" class="view">
+          <header class="view-header">
+            <div>
+              <h1 class="title">Settings</h1>
+              <p class="subtitle">기본 Provider/Model을 설정하고 Provider별 API Key를 관리합니다.</p>
+            </div>
+            <div class="header-actions">
+              <button id="settings-save-btn" class="btn btn-primary" type="button">설정 저장</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">기본 실행 설정</h2>
+            </div>
+            <div class="settings-grid">
+              <label class="field">
+                <span>기본 Provider</span>
+                <select id="settings-provider-select">
+                  <option value="open-ai">OPEN-AI</option>
+                  <option value="anthropic">ANTHROPIC</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="venice">Venice</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>기본 Model</span>
+                <input id="settings-model-input" type="text" placeholder="예: gpt-4.1-mini" />
+              </label>
+              <label class="field">
+                <span>기본 Language</span>
+                <input id="settings-language-input" type="text" value="ko" />
+              </label>
+            </div>
+            <p class="settings-hint">Provider를 바꾸면 해당 Provider의 기본 Model 값을 자동 제안합니다.</p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Provider별 API Key</h2>
+            </div>
+            <div class="settings-grid settings-grid-keys">
+              <label class="field">
+                <span>OPEN-AI API Key</span>
+                <input id="api-key-open-ai" type="password" placeholder="sk-..." />
+              </label>
+              <label class="field">
+                <span>ANTHROPIC API Key</span>
+                <input id="api-key-anthropic" type="password" placeholder="sk-ant-..." />
+              </label>
+              <label class="field">
+                <span>OpenRouter API Key</span>
+                <input id="api-key-openrouter" type="password" placeholder="or-..." />
+              </label>
+              <label class="field">
+                <span>Venice API Key</span>
+                <input id="api-key-venice" type="password" placeholder="vce-..." />
+              </label>
+            </div>
+            <p class="settings-hint" id="settings-active-summary"></p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <input id="epub-file-input" type="file" accept=".epub" multiple hidden />
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

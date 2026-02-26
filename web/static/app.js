@@ -1,0 +1,636 @@
+const PROVIDERS = ["open-ai", "anthropic", "openrouter", "venice"];
+
+const PROVIDER_LABEL = {
+  "open-ai": "OPEN-AI",
+  anthropic: "ANTHROPIC",
+  openrouter: "OpenRouter",
+  venice: "Venice",
+};
+
+const DEFAULT_MODEL_BY_PROVIDER = {
+  "open-ai": "gpt-4.1-mini",
+  anthropic: "claude-sonnet-4-20250514",
+  openrouter: "openai/gpt-4.1-mini",
+  venice: "venice-uncensored",
+};
+
+const STORAGE_KEY = "book-pro-panel-settings";
+
+const state = {
+  page: 1,
+  pageSize: 10,
+  total: 0,
+  items: [],
+  currentBook: null,
+  currentTab: "chapter",
+  currentView: "library",
+  uploading: false,
+  pendingUploadMode: "multi",
+  settings: {
+    selectedProvider: "open-ai",
+    language: "ko",
+    models: { ...DEFAULT_MODEL_BY_PROVIDER },
+    apiKeys: {
+      "open-ai": "",
+      anthropic: "",
+      openrouter: "",
+      venice: "",
+    },
+  },
+};
+
+const el = {
+  navLibrary: document.getElementById("nav-library"),
+  navDetail: document.getElementById("nav-detail"),
+  navSettings: document.getElementById("nav-settings"),
+
+  viewLibrary: document.getElementById("view-library"),
+  viewDetail: document.getElementById("view-detail"),
+  viewSettings: document.getElementById("view-settings"),
+
+  settingsProviderSelect: document.getElementById("settings-provider-select"),
+  settingsModelInput: document.getElementById("settings-model-input"),
+  settingsLanguageInput: document.getElementById("settings-language-input"),
+  apiKeyOpenAi: document.getElementById("api-key-open-ai"),
+  apiKeyAnthropic: document.getElementById("api-key-anthropic"),
+  apiKeyOpenrouter: document.getElementById("api-key-openrouter"),
+  apiKeyVenice: document.getElementById("api-key-venice"),
+  settingsSaveBtn: document.getElementById("settings-save-btn"),
+  settingsActiveSummary: document.getElementById("settings-active-summary"),
+
+  uploadBooksBtn: document.getElementById("upload-books-btn"),
+  uploadSingleBtn: document.getElementById("upload-single-btn"),
+  generateFromDetailBtn: document.getElementById("generate-from-detail-btn"),
+  fileInput: document.getElementById("epub-file-input"),
+
+  metricTotalBooks: document.getElementById("metric-total-books"),
+  metricProcessingBooks: document.getElementById("metric-processing-books"),
+  metricCompletedBooks: document.getElementById("metric-completed-books"),
+
+  booksTableBody: document.getElementById("books-table-body"),
+  libraryPageInfo: document.getElementById("library-page-info"),
+  prevPageBtn: document.getElementById("prev-page-btn"),
+  nextPageBtn: document.getElementById("next-page-btn"),
+
+  detailTitle: document.getElementById("detail-title"),
+  detailSubtitle: document.getElementById("detail-subtitle"),
+  detailChapterCount: document.getElementById("detail-chapter-count"),
+  detailCharacterCount: document.getElementById("detail-character-count"),
+  detailUpdatedAt: document.getElementById("detail-updated-at"),
+
+  tabButtons: Array.from(document.querySelectorAll(".tab")),
+  tabChapter: document.getElementById("tab-chapter"),
+  tabCharacter: document.getElementById("tab-character"),
+  tabWorld: document.getElementById("tab-world"),
+
+  insightBookTitle: document.getElementById("insight-book-title"),
+  insightBookStats: document.getElementById("insight-book-stats"),
+
+  toast: document.getElementById("toast"),
+};
+
+function escapeHtml(text) {
+  return (text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function showToast(message, isError = false) {
+  el.toast.textContent = message;
+  el.toast.style.background = isError ? "#6b1010" : "#000000";
+  el.toast.classList.add("show");
+  window.clearTimeout(showToast._timer);
+  showToast._timer = window.setTimeout(() => {
+    el.toast.classList.remove("show");
+  }, 2200);
+}
+
+function formatDate(iso) {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function createDefaultSettings() {
+  return {
+    selectedProvider: "open-ai",
+    language: "ko",
+    models: { ...DEFAULT_MODEL_BY_PROVIDER },
+    apiKeys: {
+      "open-ai": "",
+      anthropic: "",
+      openrouter: "",
+      venice: "",
+    },
+  };
+}
+
+function normalizeProvider(value) {
+  return PROVIDERS.includes(value) ? value : "open-ai";
+}
+
+function loadSettingsFromStorage() {
+  const defaults = createDefaultSettings();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      state.settings = defaults;
+      renderSettingsForm();
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    const selectedProvider = normalizeProvider(parsed.selectedProvider || parsed.provider || "open-ai");
+    const language = typeof parsed.language === "string" && parsed.language.trim() ? parsed.language.trim() : "ko";
+
+    const models = { ...DEFAULT_MODEL_BY_PROVIDER };
+    if (parsed.models && typeof parsed.models === "object") {
+      PROVIDERS.forEach((provider) => {
+        const candidate = parsed.models[provider];
+        if (typeof candidate === "string" && candidate.trim()) {
+          models[provider] = candidate.trim();
+        }
+      });
+    }
+    if (typeof parsed.model === "string" && parsed.model.trim()) {
+      models[selectedProvider] = parsed.model.trim();
+    }
+
+    const apiKeys = { ...defaults.apiKeys };
+    if (parsed.apiKeys && typeof parsed.apiKeys === "object") {
+      PROVIDERS.forEach((provider) => {
+        const key = parsed.apiKeys[provider];
+        if (typeof key === "string") {
+          apiKeys[provider] = key;
+        }
+      });
+    }
+    if (typeof parsed.apiKey === "string" && parsed.apiKey.trim()) {
+      apiKeys[selectedProvider] = parsed.apiKey.trim();
+    }
+
+    state.settings = {
+      selectedProvider,
+      language,
+      models,
+      apiKeys,
+    };
+  } catch (_error) {
+    state.settings = defaults;
+  }
+
+  renderSettingsForm();
+}
+
+function persistSettings() {
+  const provider = state.settings.selectedProvider;
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      selectedProvider: provider,
+      provider,
+      language: state.settings.language,
+      models: state.settings.models,
+      model: state.settings.models[provider] || "",
+      apiKeys: state.settings.apiKeys,
+      apiKey: state.settings.apiKeys[provider] || "",
+    }),
+  );
+}
+
+function renderSettingsSummary() {
+  const provider = state.settings.selectedProvider;
+  const providerLabel = PROVIDER_LABEL[provider] || provider;
+  const model = state.settings.models[provider] || "";
+  const hasKey = Boolean(state.settings.apiKeys[provider]);
+
+  el.settingsActiveSummary.textContent = `현재 기본값: ${providerLabel} / ${model || "모델 미설정"} / API Key ${hasKey ? "설정됨" : "미설정"}`;
+}
+
+function renderSettingsForm() {
+  const provider = state.settings.selectedProvider;
+
+  el.settingsProviderSelect.value = provider;
+  el.settingsModelInput.value = state.settings.models[provider] || "";
+  el.settingsLanguageInput.value = state.settings.language || "ko";
+
+  el.apiKeyOpenAi.value = state.settings.apiKeys["open-ai"] || "";
+  el.apiKeyAnthropic.value = state.settings.apiKeys.anthropic || "";
+  el.apiKeyOpenrouter.value = state.settings.apiKeys.openrouter || "";
+  el.apiKeyVenice.value = state.settings.apiKeys.venice || "";
+
+  renderSettingsSummary();
+}
+
+function syncSettingsFromForm() {
+  const prevProvider = state.settings.selectedProvider;
+  const nextProvider = normalizeProvider(el.settingsProviderSelect.value);
+
+  const prevModelInput = el.settingsModelInput.value.trim();
+  if (prevModelInput) {
+    state.settings.models[prevProvider] = prevModelInput;
+  } else if (!state.settings.models[prevProvider]) {
+    state.settings.models[prevProvider] = DEFAULT_MODEL_BY_PROVIDER[prevProvider] || "";
+  }
+
+  state.settings.selectedProvider = nextProvider;
+  state.settings.language = el.settingsLanguageInput.value.trim() || "ko";
+  state.settings.apiKeys["open-ai"] = el.apiKeyOpenAi.value.trim();
+  state.settings.apiKeys.anthropic = el.apiKeyAnthropic.value.trim();
+  state.settings.apiKeys.openrouter = el.apiKeyOpenrouter.value.trim();
+  state.settings.apiKeys.venice = el.apiKeyVenice.value.trim();
+
+  if (!state.settings.models[nextProvider]) {
+    state.settings.models[nextProvider] = DEFAULT_MODEL_BY_PROVIDER[nextProvider] || "";
+  }
+
+  el.settingsModelInput.value = state.settings.models[nextProvider];
+
+  persistSettings();
+  renderSettingsSummary();
+}
+
+function switchView(view) {
+  state.currentView = view;
+  el.viewLibrary.classList.toggle("active", view === "library");
+  el.viewDetail.classList.toggle("active", view === "detail");
+  el.viewSettings.classList.toggle("active", view === "settings");
+
+  el.navLibrary.classList.toggle("active", view === "library");
+  el.navDetail.classList.toggle("active", view === "detail");
+  el.navSettings.classList.toggle("active", view === "settings");
+}
+
+function currentPageCount() {
+  return Math.max(1, Math.ceil(state.total / state.pageSize));
+}
+
+function setUploading(isUploading) {
+  state.uploading = isUploading;
+  el.uploadBooksBtn.disabled = isUploading;
+  el.uploadSingleBtn.disabled = isUploading;
+  el.generateFromDetailBtn.disabled = isUploading;
+
+  if (isUploading) {
+    el.uploadBooksBtn.textContent = "업로드/요약 중...";
+    el.uploadSingleBtn.textContent = "업로드/요약 중...";
+    el.generateFromDetailBtn.textContent = "요약 생성 중...";
+  } else {
+    el.uploadBooksBtn.textContent = "EPUB 여러권 업로드";
+    el.uploadSingleBtn.textContent = "EPUB 업로드";
+    el.generateFromDetailBtn.textContent = "새 요약 생성";
+  }
+}
+
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+async function loadLibrary({ autoOpenFirst = false } = {}) {
+  const payload = await fetchJson(`/books?page=${state.page}&page_size=${state.pageSize}`);
+  state.total = payload.total;
+  state.items = payload.items;
+
+  el.metricTotalBooks.textContent = String(payload.total);
+  el.metricProcessingBooks.textContent = "0";
+  el.metricCompletedBooks.textContent = String(payload.total);
+
+  renderBooksTable(payload.items);
+
+  const totalPages = currentPageCount();
+  el.libraryPageInfo.textContent = `페이지 ${state.page} / ${totalPages}`;
+  el.prevPageBtn.disabled = state.page <= 1;
+  el.nextPageBtn.disabled = state.page >= totalPages;
+
+  if (autoOpenFirst && payload.items.length > 0) {
+    await openBook(payload.items[0].slug, { switchToDetail: true });
+  }
+}
+
+function renderBooksTable(items) {
+  if (!items.length) {
+    el.booksTableBody.innerHTML = `
+      <tr>
+        <td class="empty-row" colspan="6">저장된 책이 없습니다. EPUB 업로드 후 시작하세요.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  el.booksTableBody.innerHTML = items
+    .map(
+      (item) => `
+      <tr>
+        <td>${escapeHtml(item.book_title)}</td>
+        <td>${escapeHtml(item.status)}</td>
+        <td>${escapeHtml(formatDate(item.updated_at))}</td>
+        <td>${item.chapter_count}</td>
+        <td>${item.character_count}</td>
+        <td>
+          <button class="inline-action" data-open-book="${escapeHtml(item.slug)}" type="button">열기</button>
+        </td>
+      </tr>
+    `,
+    )
+    .join("");
+
+  el.booksTableBody.querySelectorAll("[data-open-book]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const slug = button.getAttribute("data-open-book");
+      if (!slug) return;
+      await openBook(slug, { switchToDetail: true });
+    });
+  });
+}
+
+function extractSection(markdown, sectionName) {
+  const pattern = new RegExp(`##\\s+${sectionName}\\n([\\s\\S]*?)(\\n##\\s+|$)`, "m");
+  const match = markdown.match(pattern);
+  return match ? match[1].trim() : "";
+}
+
+function markdownToHtml(markdown) {
+  const lines = (markdown || "").split("\n");
+  let html = "";
+  let inList = false;
+
+  const closeList = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      continue;
+    }
+
+    if (line.startsWith("# ")) {
+      closeList();
+      html += `<h3>${escapeHtml(line.slice(2))}</h3>`;
+      continue;
+    }
+
+    if (line.startsWith("## ")) {
+      closeList();
+      html += `<h4>${escapeHtml(line.slice(3))}</h4>`;
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      if (!inList) {
+        html += "<ul>";
+        inList = true;
+      }
+      html += `<li>${escapeHtml(line.slice(2))}</li>`;
+      continue;
+    }
+
+    closeList();
+    html += `<p>${escapeHtml(line)}</p>`;
+  }
+
+  closeList();
+  return html;
+}
+
+function renderDetail(detail) {
+  el.detailTitle.textContent = detail.book_title;
+  el.detailSubtitle.textContent = `slug: ${detail.slug}`;
+  el.detailChapterCount.textContent = String(detail.chapter_count);
+  el.detailCharacterCount.textContent = String(detail.character_count);
+  el.detailUpdatedAt.textContent = formatDate(detail.updated_at);
+
+  el.insightBookTitle.textContent = detail.book_title;
+  el.insightBookStats.textContent = `챕터 ${detail.chapter_count}개 · 캐릭터 ${detail.character_count}개`;
+
+  if (!detail.chapters.length) {
+    el.tabChapter.innerHTML = `<div class="chapter-card"><p class="chapter-snippet">챕터 요약이 없습니다.</p></div>`;
+  } else {
+    el.tabChapter.innerHTML = detail.chapters
+      .map((chapter) => {
+        const summary = extractSection(chapter.markdown, "요약") || "요약 텍스트가 없습니다.";
+        return `
+          <article class="chapter-card">
+            <h3 class="chapter-title">Chapter ${chapter.index}: ${escapeHtml(chapter.title)}</h3>
+            <p class="chapter-snippet">${escapeHtml(summary)}</p>
+            <details>
+              <summary>원문 보기 (${escapeHtml(chapter.file_name)})</summary>
+              <pre>${escapeHtml(chapter.markdown)}</pre>
+            </details>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  if (!detail.characters.length) {
+    el.tabCharacter.innerHTML = `<div class="character-card"><p class="character-snippet">캐릭터 요약이 없습니다.</p></div>`;
+  } else {
+    el.tabCharacter.innerHTML = detail.characters
+      .map((character) => {
+        const preview = character.markdown.split("\n").slice(0, 6).join("\n");
+        return `
+          <article class="character-card">
+            <h3 class="character-title">${escapeHtml(character.name)}</h3>
+            <p class="character-snippet">${escapeHtml(preview).replaceAll("\n", "<br>")}</p>
+            <details>
+              <summary>원문 보기 (${escapeHtml(character.file_name)})</summary>
+              <pre>${escapeHtml(character.markdown)}</pre>
+            </details>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  el.tabWorld.innerHTML = `<div class="markdown-view">${markdownToHtml(detail.setting_markdown || "setting.md가 없습니다.")}</div>`;
+
+  setTab(state.currentTab);
+}
+
+function setTab(tabName) {
+  state.currentTab = tabName;
+  el.tabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === tabName);
+  });
+  el.tabChapter.classList.toggle("active", tabName === "chapter");
+  el.tabCharacter.classList.toggle("active", tabName === "character");
+  el.tabWorld.classList.toggle("active", tabName === "world");
+}
+
+async function openBook(slug, { switchToDetail = false } = {}) {
+  const detail = await fetchJson(`/books/${encodeURIComponent(slug)}`);
+  state.currentBook = detail;
+  renderDetail(detail);
+
+  if (switchToDetail) {
+    switchView("detail");
+  }
+}
+
+function openFilePicker(mode) {
+  if (state.uploading) return;
+  state.pendingUploadMode = mode;
+  el.fileInput.multiple = mode === "multi";
+  el.fileInput.value = "";
+  el.fileInput.click();
+}
+
+function getRunConfig() {
+  syncSettingsFromForm();
+
+  const provider = state.settings.selectedProvider;
+  const model = state.settings.models[provider] || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+  const apiKey = state.settings.apiKeys[provider] || "";
+  const language = state.settings.language || "ko";
+
+  if (!apiKey) {
+    throw new Error(`${PROVIDER_LABEL[provider]} API Key를 Settings 페이지에서 입력하세요.`);
+  }
+
+  return { provider, model, apiKey, language };
+}
+
+function buildUploadFormData(files) {
+  const formData = new FormData();
+  const config = getRunConfig();
+
+  files.forEach((file) => formData.append("files", file));
+  formData.append("provider", config.provider);
+  formData.append("language", config.language);
+  if (config.model) formData.append("model", config.model);
+  if (config.apiKey) formData.append("api_key", config.apiKey);
+
+  return formData;
+}
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+
+  try {
+    setUploading(true);
+    const formData = buildUploadFormData(files);
+    const payload = await fetchJson("/summaries/from-epubs", {
+      method: "POST",
+      body: formData,
+    });
+
+    showToast(`완료 ${payload.success_count}권 / 실패 ${payload.failure_count}권`, payload.failure_count > 0);
+
+    await loadLibrary({ autoOpenFirst: payload.success_count > 0 });
+    if (payload.success_count > 0) {
+      switchView("library");
+    }
+  } catch (error) {
+    showToast(error.message || "업로드 실패", true);
+  } finally {
+    setUploading(false);
+  }
+}
+
+function bindSettingsEvents() {
+  el.settingsProviderSelect.addEventListener("change", () => {
+    syncSettingsFromForm();
+    renderSettingsForm();
+  });
+
+  el.settingsModelInput.addEventListener("change", () => {
+    syncSettingsFromForm();
+  });
+
+  el.settingsLanguageInput.addEventListener("change", () => {
+    syncSettingsFromForm();
+  });
+
+  [el.apiKeyOpenAi, el.apiKeyAnthropic, el.apiKeyOpenrouter, el.apiKeyVenice].forEach((input) => {
+    input.addEventListener("change", () => {
+      syncSettingsFromForm();
+    });
+  });
+
+  el.settingsSaveBtn.addEventListener("click", () => {
+    syncSettingsFromForm();
+    showToast("설정을 저장했습니다.");
+  });
+}
+
+function bindEvents() {
+  el.navLibrary.addEventListener("click", () => switchView("library"));
+
+  el.navDetail.addEventListener("click", () => {
+    if (!state.currentBook) {
+      showToast("먼저 Library에서 책을 선택하세요.", true);
+      return;
+    }
+    switchView("detail");
+  });
+
+  el.navSettings.addEventListener("click", () => {
+    switchView("settings");
+  });
+
+  el.uploadBooksBtn.addEventListener("click", () => openFilePicker("multi"));
+  el.uploadSingleBtn.addEventListener("click", () => openFilePicker("single"));
+  el.generateFromDetailBtn.addEventListener("click", () => openFilePicker("single"));
+
+  el.fileInput.addEventListener("change", async () => {
+    const files = Array.from(el.fileInput.files || []);
+    if (!files.length) return;
+    const picked = state.pendingUploadMode === "single" ? files.slice(0, 1) : files;
+    await uploadFiles(picked);
+  });
+
+  el.prevPageBtn.addEventListener("click", async () => {
+    if (state.page <= 1) return;
+    state.page -= 1;
+    await loadLibrary();
+  });
+
+  el.nextPageBtn.addEventListener("click", async () => {
+    if (state.page >= currentPageCount()) return;
+    state.page += 1;
+    await loadLibrary();
+  });
+
+  el.tabButtons.forEach((button) => {
+    button.addEventListener("click", () => setTab(button.dataset.tab));
+  });
+
+  bindSettingsEvents();
+}
+
+async function init() {
+  loadSettingsFromStorage();
+  bindEvents();
+  setTab("chapter");
+
+  try {
+    await loadLibrary();
+    if (state.items.length > 0) {
+      await openBook(state.items[0].slug);
+    }
+  } catch (error) {
+    showToast(error.message || "초기 로딩 실패", true);
+  }
+}
+
+void init();
