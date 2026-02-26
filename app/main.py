@@ -24,6 +24,7 @@ from app.progress import (
 from app.schemas import (
     BookDetailResponse,
     BookListResponse,
+    BookReaderResponse,
     BookSummary,
     ChapterSummary,
     MultiSummarizeError,
@@ -37,6 +38,7 @@ from app.storage import (
     ensure_book_directories,
     list_books,
     read_book_detail,
+    read_book_reader,
     save_book_summary,
     save_chapter_summary,
     save_uploaded_epub,
@@ -45,6 +47,7 @@ from app.summarizer import MultiProviderBookSummarizer, normalize_provider
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
+SKILL_DOC_PATH = BASE_DIR / "SKILL.md"
 logger = logging.getLogger("uvicorn.error")
 DEFAULT_MULTI_SUMMARY_PARALLEL = 3
 
@@ -69,6 +72,13 @@ def panel() -> FileResponse:
     if not panel_path.exists():
         raise HTTPException(status_code=404, detail="웹 패널 파일이 없습니다.")
     return FileResponse(str(panel_path))
+
+
+@app.get("/skill.md")
+def skill_markdown() -> FileResponse:
+    if not SKILL_DOC_PATH.exists():
+        raise HTTPException(status_code=404, detail="SKILL.md 파일이 없습니다.")
+    return FileResponse(str(SKILL_DOC_PATH), media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/health")
@@ -149,7 +159,7 @@ async def _summarize_upload(
     file: UploadFile,
     *,
     summarizer: MultiProviderBookSummarizer,
-    chapter_limit: int,
+    chapter_limit: int | None,
     language: str,
     precise_analysis: bool,
     output_dir: str,
@@ -222,7 +232,7 @@ def _summarize_from_temp_path(
     temp_path: str,
     original_filename: str,
     summarizer: MultiProviderBookSummarizer,
-    chapter_limit: int,
+    chapter_limit: int | None,
     language: str,
     precise_analysis: bool,
     output_dir: str,
@@ -269,14 +279,15 @@ def _summarize_from_temp_path(
         )
 
     original_chapter_count = len(book.chapters)
-    book.chapters = book.chapters[:chapter_limit]
-    if original_chapter_count != len(book.chapters):
-        logger.info(
-            "[챕터 제한 적용] title='%s' %d -> %d",
-            book.title,
-            original_chapter_count,
-            len(book.chapters),
-        )
+    if chapter_limit is not None and chapter_limit > 0:
+        book.chapters = book.chapters[:chapter_limit]
+        if original_chapter_count != len(book.chapters):
+            logger.info(
+                "[챕터 제한 적용] title='%s' %d -> %d",
+                book.title,
+                original_chapter_count,
+                len(book.chapters),
+            )
     if upload_id:
         update_upload_progress(
             upload_id,
@@ -351,7 +362,13 @@ async def summarize_from_epub(
     max_chapters: int | None = Form(default=None),
 ) -> SummarizeResponse:
     settings = get_settings()
-    chapter_limit = max_chapters or settings.max_chapters_per_request
+    chapter_limit = (
+        max_chapters
+        if max_chapters is not None
+        else settings.max_chapters_per_request
+    )
+    if chapter_limit is not None and chapter_limit <= 0:
+        chapter_limit = None
 
     try:
         logger.info(
@@ -402,7 +419,13 @@ async def summarize_from_epubs(
         raise HTTPException(status_code=400, detail="최소 1개 이상의 파일이 필요합니다.")
 
     settings = get_settings()
-    chapter_limit = max_chapters or settings.max_chapters_per_request
+    chapter_limit = (
+        max_chapters
+        if max_chapters is not None
+        else settings.max_chapters_per_request
+    )
+    if chapter_limit is not None and chapter_limit <= 0:
+        chapter_limit = None
 
     try:
         _build_summarizer(provider=provider, api_key=api_key, model=model)
@@ -507,6 +530,20 @@ def get_book_detail(book_slug: str) -> BookDetailResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return BookDetailResponse.model_validate(payload)
+
+
+@app.get("/books/{book_slug}/reader", response_model=BookReaderResponse)
+def get_book_reader(book_slug: str) -> BookReaderResponse:
+    settings = get_settings()
+
+    try:
+        payload = read_book_reader(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return BookReaderResponse.model_validate(payload)
 
 
 @app.get("/uploads/{upload_id}/progress", response_model=UploadProgressResponse)

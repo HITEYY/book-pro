@@ -1,6 +1,6 @@
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class CharacterEvent(BaseModel):
@@ -12,6 +12,10 @@ class CharacterEvent(BaseModel):
 class ChapterCharacterTrait(BaseModel):
     character: str = Field(default="알 수 없음", description="해당 챕터에 등장한 캐릭터")
     traits: List[str] = Field(default_factory=list, description="챕터 맥락에서 드러난 성격/행동 특징")
+    speech_inferences: List[str] = Field(
+        default_factory=list,
+        description="캐릭터의 말/대사에서 추론 가능한 특징, 심리, 관계 정보",
+    )
 
 
 class ChapterSummary(BaseModel):
@@ -24,11 +28,15 @@ class ChapterSummary(BaseModel):
 
 
 class CharacterSummary(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str = Field(default="알 수 없음")
     age: str = Field(default="알 수 없음")
-    seonsang: str = Field(
+    sinsang: str = Field(
         default="알 수 없음",
-        description="요청의 '선상' 항목을 성향/사회적 축으로 해석한 값",
+        description="캐릭터의 신상(정체성/배경/사회적 위치 등)",
+        validation_alias=AliasChoices("sinsang", "seonsang"),
+        serialization_alias="sinsang",
     )
     growth_background: str = Field(default="알 수 없음")
     voice: str = Field(default="알 수 없음")
@@ -117,6 +125,19 @@ class BookDetailResponse(BaseModel):
     chapters: List[BookChapterFile] = Field(default_factory=list)
     characters: List[BookCharacterFile] = Field(default_factory=list)
     setting_markdown: str = ""
+
+
+class BookReaderChapter(BaseModel):
+    index: int
+    title: str
+    text: str
+
+
+class BookReaderResponse(BaseModel):
+    slug: str
+    book_title: str
+    chapter_count: int
+    chapters: List[BookReaderChapter] = Field(default_factory=list)
 
 
 class ProviderModelsResponse(BaseModel):

@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+.idea
+__pycache__
+*.pyc
+.pytest_cache
+.env
+books
+web-penal.pen

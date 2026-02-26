@@ -3,6 +3,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.epub_parser import parse_epub
 from app.schemas import (
     BookSummary,
     ChapterCharacterTrait,
@@ -13,7 +14,7 @@ from app.schemas import (
 
 _INVALID_CHARS_RE = re.compile(r'[\\/:*?"<>|]')
 _WHITESPACE_RE = re.compile(r"\s+")
-_CHAPTER_NAME_RE = re.compile(r"^c-(?P<index>\d+)-(?P<title>.+)\\.md$")
+_CHAPTER_NAME_RE = re.compile(r"^c-(?P<index>\d+)-(?P<title>.+)\.md$")
 
 
 def _slug_part(value: str, fallback: str) -> str:
@@ -76,8 +77,10 @@ def _render_character_traits(rows: list[ChapterCharacterTrait]) -> str:
     lines: list[str] = []
     for row in rows:
         traits = ", ".join(row.traits) if row.traits else "없음"
+        speech = ", ".join(row.speech_inferences) if row.speech_inferences else "없음"
         lines.append(f"- **인물**: {row.character}")
         lines.append(f"  - 특징: {traits}")
+        lines.append(f"  - 대사 기반 추론: {speech}")
     return "\n".join(lines)
 
 
@@ -87,7 +90,7 @@ def _render_character_markdown(character: CharacterSummary) -> str:
     return (
         f"# {character.name}\n\n"
         f"- 나이: {character.age}\n"
-        f"- 선상: {character.seonsang}\n"
+        f"- 신상: {character.sinsang}\n"
         f"- 성장 배경: {character.growth_background}\n"
         f"- 목소리: {character.voice}\n"
         f"- 느낌: {character.feeling}\n\n"
@@ -149,6 +152,17 @@ def _latest_markdown_timestamp(book_dir: Path) -> float:
     if not md_files:
         return book_dir.stat().st_mtime
     return max(p.stat().st_mtime for p in md_files)
+
+
+def _latest_epub_path(book_dir: Path) -> Path | None:
+    epub_files = sorted(
+        [p for p in book_dir.glob("*.epub") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not epub_files:
+        return None
+    return epub_files[0]
 
 
 def _book_title_from_setting(book_dir: Path, fallback_slug: str) -> str:
@@ -273,6 +287,29 @@ def read_book_detail(root_dir: str | Path, *, slug: str) -> dict:
         "chapters": chapters,
         "characters": characters,
         "setting_markdown": setting_markdown,
+    }
+
+
+def read_book_reader(root_dir: str | Path, *, slug: str) -> dict:
+    root = Path(root_dir)
+    book_dir = _safe_book_path(root, slug)
+    epub_path = _latest_epub_path(book_dir)
+    if not epub_path:
+        raise FileNotFoundError(f"원문 EPUB 파일을 찾을 수 없습니다: {slug}")
+
+    book = parse_epub(epub_path, min_words=1, preserve_paragraphs=True)
+    return {
+        "slug": slug,
+        "book_title": book.title,
+        "chapter_count": len(book.chapters),
+        "chapters": [
+            {
+                "index": chapter.index,
+                "title": chapter.title,
+                "text": chapter.text,
+            }
+            for chapter in book.chapters
+        ],
     }
 
 

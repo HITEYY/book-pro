@@ -1,0 +1,15 @@
+services:
+  book-pro:
+    build: .
+    image: book-pro:local
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      BOOK_PRO_PROVIDER: ${BOOK_PRO_PROVIDER:-openai}
+      BOOK_PRO_MODEL: ${BOOK_PRO_MODEL:-gpt-4.1-mini}
+      BOOK_PRO_MAX_CHAPTERS: ${BOOK_PRO_MAX_CHAPTERS:-0}
+      BOOK_PRO_OUTPUT_DIR: /app/books
+    volumes:
+      - ./books:/app/books
+    restart: unless-stopped

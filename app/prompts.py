@@ -17,13 +17,15 @@ def build_chapter_prompt(
     precise_analysis: bool = False,
 ) -> str:
     precise_note = (
-        "정밀 분석 모드다. 챕터에 등장한 인물별로 이 장에서 드러난 특징을 character_traits에 반드시 정리하라."
+        "정밀 분석 모드다. 챕터에 등장한 인물별로 이 장에서 드러난 특징을 character_traits에 반드시 정리하고, "
+        "각 인물의 말/대사에서 알 수 있는 성향·심리·관계 정보도 speech_inferences에 반드시 포함하라."
         if precise_analysis
         else "정밀 분석 모드가 아니므로 character_traits는 생략하거나 빈 배열로 반환해도 된다."
     )
     precise_schema = (
         ',\n  "character_traits": [\n'
-        '    {"character": "인물명", "traits": ["이 챕터에서 드러난 특징1", "특징2"]}\n'
+        '    {"character": "인물명", "traits": ["이 챕터에서 드러난 특징1", "특징2"], '
+        '"speech_inferences": ["말/대사에서 추론한 정보1", "정보2"]}\n'
         "  ]"
     )
 
@@ -59,9 +61,10 @@ def _chapter_compact_lines(chapter_summaries: Iterable[ChapterSummary]) -> str:
         if chapter.character_traits:
             trait_rows: list[str] = []
             for row in chapter.character_traits:
-                if not row.traits:
+                if not row.traits and not row.speech_inferences:
                     continue
-                trait_rows.append(f"{row.character}({', '.join(row.traits[:4])})")
+                merged = row.traits[:3] + [f"대사:{item}" for item in row.speech_inferences[:2]]
+                trait_rows.append(f"{row.character}({', '.join(merged)})")
             if trait_rows:
                 rows.append(f"  캐릭터 특징={'; '.join(trait_rows)}")
     return "\n".join(rows)
@@ -88,7 +91,7 @@ def build_character_prompt(
     {{
       "name": "이름",
       "age": "나이 또는 추정",
-      "seonsang": "선상(성향/사회적 축)",
+      "sinsang": "신상(정체성/배경/사회적 위치)",
       "growth_background": "성장 배경",
       "voice": "말투/목소리 인상",
       "feeling": "전반적 느낌",

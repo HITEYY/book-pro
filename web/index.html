@@ -17,18 +17,18 @@
       <aside class="sidebar">
         <div class="brand-wrap">
           <div class="brand">book-pro</div>
-          <div class="brand-sub">Multi-book Summary Hub</div>
+          <div class="brand-sub" data-i18n="brand_sub">Multi-book Summary Hub</div>
         </div>
 
         <nav class="nav">
-          <button class="nav-item active" id="nav-library" type="button">Library</button>
-          <button class="nav-item" id="nav-detail" type="button">Book Detail</button>
-          <button class="nav-item" id="nav-settings" type="button">Settings</button>
+          <button class="nav-item active" id="nav-library" type="button" data-i18n="nav_library">Library</button>
+          <button class="nav-item" id="nav-detail" type="button" data-i18n="nav_detail">Book Detail</button>
+          <button class="nav-item" id="nav-settings" type="button" data-i18n="nav_settings">Settings</button>
         </nav>
 
         <div class="tip-box">
-          <div class="tip-title">EPUB 다권 업로드</div>
-          <p class="tip-body">여러 권을 한번에 업로드하고 책별 챕터/캐릭터/세계관 요약을 저장합니다.</p>
+          <div class="tip-title" data-i18n="tip_title">Upload Multiple EPUBs</div>
+          <p class="tip-body" data-i18n="tip_body">Upload multiple books at once and save chapter/character/world summaries per book.</p>
         </div>
       </aside>
 
@@ -36,47 +36,47 @@
         <section id="view-library" class="view active">
           <header class="view-header">
             <div>
-              <h1 class="title">Books Library</h1>
-              <p class="subtitle">여러 권을 등록하고 책별 상세 요약 페이지로 이동하세요.</p>
+              <h1 class="title" data-i18n="library_title">Books Library</h1>
+              <p class="subtitle" data-i18n="library_subtitle">Register multiple books and open each detail page.</p>
             </div>
             <div class="header-actions">
-              <button id="upload-books-btn" class="btn btn-primary" type="button">EPUB 여러권 업로드</button>
+              <button id="upload-books-btn" class="btn btn-primary" type="button" data-i18n="upload_books_btn">Upload EPUBs</button>
             </div>
           </header>
 
           <section class="metrics" id="library-metrics">
             <article class="metric-card">
-              <div class="metric-label">등록된 책</div>
+              <div class="metric-label" data-i18n="metric_total_books_label">Books</div>
               <div class="metric-value" id="metric-total-books">0</div>
-              <div class="metric-meta">라이브러리 전체</div>
+              <div class="metric-meta" data-i18n="metric_total_books_meta">All library items</div>
             </article>
             <article class="metric-card metric-card-dark">
-              <div class="metric-label">처리 중</div>
+              <div class="metric-label" data-i18n="metric_processing_label">Processing</div>
               <div class="metric-value" id="metric-processing-books">0</div>
-              <div class="metric-meta">현재 실행중</div>
+              <div class="metric-meta" data-i18n="metric_processing_meta">Currently running</div>
             </article>
             <article class="metric-card">
-              <div class="metric-label">완료</div>
+              <div class="metric-label" data-i18n="metric_completed_label">Completed</div>
               <div class="metric-value" id="metric-completed-books">0</div>
-              <div class="metric-meta">열람 가능</div>
+              <div class="metric-meta" data-i18n="metric_completed_meta">Ready to view</div>
             </article>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">책 목록</h2>
+              <h2 class="panel-title" data-i18n="books_table_title">Books</h2>
             </div>
 
             <div class="table-wrap">
               <table class="book-table">
                 <thead>
                   <tr>
-                    <th>제목</th>
-                    <th>상태</th>
-                    <th>최근 업데이트</th>
-                    <th>챕터</th>
-                    <th>캐릭터</th>
-                    <th>액션</th>
+                    <th data-i18n="th_title">Title</th>
+                    <th data-i18n="th_status">Status</th>
+                    <th data-i18n="th_updated">Updated</th>
+                    <th data-i18n="th_chapters">Chapters</th>
+                    <th data-i18n="th_characters">Characters</th>
+                    <th data-i18n="th_action">Action</th>
                   </tr>
                 </thead>
                 <tbody id="books-table-body"></tbody>
@@ -84,10 +84,10 @@
             </div>
 
             <div class="pagination">
-              <div id="library-page-info">페이지 1 / 1</div>
+              <div id="library-page-info">Page 1 / 1</div>
               <div class="pagination-actions">
-                <button id="prev-page-btn" class="btn btn-ghost" type="button">이전</button>
-                <button id="next-page-btn" class="btn btn-ghost" type="button">다음</button>
+                <button id="prev-page-btn" class="btn btn-ghost" type="button" data-i18n="pagination_prev">Prev</button>
+                <button id="next-page-btn" class="btn btn-ghost" type="button" data-i18n="pagination_next">Next</button>
               </div>
             </div>
           </section>
@@ -97,51 +97,51 @@
           <header class="view-header">
             <div>
               <h1 class="title" id="detail-title">Book Detail</h1>
-              <p class="subtitle" id="detail-subtitle">Library에서 책을 선택하면 상세 요약이 표시됩니다.</p>
+              <p class="subtitle" id="detail-subtitle">Select a book in Library to view details.</p>
             </div>
             <div class="header-actions">
-              <button id="upload-single-btn" class="btn btn-primary" type="button">EPUB 업로드</button>
+              <button id="upload-single-btn" class="btn btn-primary" type="button" data-i18n="upload_single_btn">Upload EPUB</button>
             </div>
           </header>
 
           <section class="metrics">
             <article class="metric-card">
-              <div class="metric-label">챕터</div>
+              <div class="metric-label" data-i18n="detail_metric_chapters_label">Chapters</div>
               <div class="metric-value" id="detail-chapter-count">0</div>
-              <div class="metric-meta">분석된 챕터 수</div>
+              <div class="metric-meta" data-i18n="detail_metric_chapters_meta">Summarized chapters</div>
             </article>
             <article class="metric-card metric-card-dark">
-              <div class="metric-label">캐릭터</div>
+              <div class="metric-label" data-i18n="detail_metric_characters_label">Characters</div>
               <div class="metric-value" id="detail-character-count">0</div>
-              <div class="metric-meta">추출된 캐릭터</div>
+              <div class="metric-meta" data-i18n="detail_metric_characters_meta">Extracted profiles</div>
             </article>
             <article class="metric-card">
-              <div class="metric-label">최근 업데이트</div>
+              <div class="metric-label" data-i18n="detail_metric_updated_label">Updated</div>
               <div class="metric-value text-small" id="detail-updated-at">-</div>
-              <div class="metric-meta">저장 기준</div>
+              <div class="metric-meta" data-i18n="detail_metric_updated_meta">Saved timestamp</div>
             </article>
           </section>
 
           <section class="detail-layout">
             <section class="panel detail-main">
               <div class="tabs">
-                <button class="tab active" data-tab="chapter" type="button">Chapter</button>
-                <button class="tab" data-tab="character" type="button">Character</button>
-                <button class="tab" data-tab="world" type="button">World</button>
+                <button class="tab active" data-tab="chapter" type="button" data-i18n="tab_chapter">Chapter</button>
+                <button class="tab" data-tab="character" type="button" data-i18n="tab_character">Character</button>
+                <button class="tab" data-tab="world" type="button" data-i18n="tab_world">World</button>
+                <button class="tab" data-tab="reader" type="button" data-i18n="tab_reader">Reader</button>
               </div>
 
               <div id="tab-chapter" class="tab-panel active"></div>
               <div id="tab-character" class="tab-panel"></div>
               <div id="tab-world" class="tab-panel"></div>
+              <div id="tab-reader" class="tab-panel"></div>
             </section>
 
             <aside class="panel detail-side">
-              <h2 class="panel-title">Quick Insights</h2>
-              <div id="insight-book-title" class="insight-item">책을 선택하세요.</div>
+              <h2 class="panel-title" data-i18n="quick_insights_title">Quick Insights</h2>
+              <div id="insight-book-title" class="insight-item">Select a book.</div>
               <div id="insight-book-stats" class="insight-item muted"></div>
-              <button id="generate-from-detail-btn" class="btn btn-primary full" type="button">
-                새 요약 생성
-              </button>
+              <button id="generate-from-detail-btn" class="btn btn-primary full" type="button" data-i18n="generate_new_summary_btn">Generate New Summary</button>
             </aside>
           </section>
         </section>
@@ -149,21 +149,21 @@
         <section id="view-settings" class="view">
           <header class="view-header">
             <div>
-              <h1 class="title">Settings</h1>
-              <p class="subtitle">기본 Provider/Model을 설정하고 Provider별 API Key를 관리합니다.</p>
+              <h1 class="title" data-i18n="settings_title">Settings</h1>
+              <p class="subtitle" data-i18n="settings_subtitle">Set default provider/model and manage API keys per provider.</p>
             </div>
             <div class="header-actions">
-              <button id="settings-save-btn" class="btn btn-primary" type="button">설정 저장</button>
+              <button id="settings-save-btn" class="btn btn-primary" type="button" data-i18n="settings_save_btn">Save Settings</button>
             </div>
           </header>
 
           <section class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">기본 실행 설정</h2>
+              <h2 class="panel-title" data-i18n="settings_basic_title">Default Run Settings</h2>
             </div>
             <div class="settings-grid">
               <label class="field">
-                <span>기본 Provider</span>
+                <span data-i18n="settings_default_provider">Default Provider</span>
                 <select id="settings-provider-select">
                   <option value="open-ai">OPEN-AI</option>
                   <option value="anthropic">ANTHROPIC</option>
@@ -173,19 +173,32 @@
                 </select>
               </label>
               <label class="field">
-                <span>기본 Model</span>
+                <span data-i18n="settings_default_model">Default Model</span>
                 <select id="settings-model-select"></select>
               </label>
               <label class="field hidden" id="settings-custom-model-field">
-                <span>직접 입력 Model</span>
-                <input id="settings-custom-model-input" type="text" placeholder="예: gpt-4.1-mini" />
+                <span data-i18n="settings_custom_model">Custom Model</span>
+                <input
+                  id="settings-custom-model-input"
+                  type="text"
+                  placeholder="e.g. gpt-4.1-mini"
+                  data-i18n-placeholder="settings_custom_model_placeholder"
+                />
               </label>
               <label class="field">
-                <span>기본 Language</span>
+                <span data-i18n="settings_ui_language">UI Language</span>
+                <select id="settings-ui-language-input">
+                  <option value="ko">Korean</option>
+                  <option value="en">English</option>
+                  <option value="ja">Japanese</option>
+                </select>
+              </label>
+              <label class="field">
+                <span data-i18n="settings_default_language">Summary Language</span>
                 <input id="settings-language-input" type="text" value="ko" />
               </label>
               <label class="field">
-                <span>업로드 병렬 수</span>
+                <span data-i18n="settings_upload_parallel">Upload Parallelism</span>
                 <input
                   id="settings-upload-parallel-input"
                   type="number"
@@ -196,19 +209,18 @@
                 />
               </label>
               <label class="field">
-                <span>정밀 분석 사용</span>
+                <span data-i18n="settings_precise_analysis">Enable Precise Analysis</span>
                 <input id="settings-precise-analysis-input" type="checkbox" />
               </label>
             </div>
-            <p class="settings-hint">
-              Model은 리스트에서 선택합니다. 목록에 없으면 직접 입력 Model을 사용하세요. 업로드 병렬 수는 1~8 범위입니다.
-              정밀 분석을 켜면 챕터별 캐릭터 특징과 작가 필체 분석을 추가해 정확도를 높입니다.
+            <p class="settings-hint" data-i18n="settings_hint">
+              Pick model from the list. If missing, use custom model. Upload parallelism range is 1~8. Precise analysis adds chapter-level character traits and writing-style analysis.
             </p>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">Provider별 API Key</h2>
+              <h2 class="panel-title" data-i18n="settings_api_key_title">API Keys by Provider</h2>
             </div>
             <div class="settings-grid settings-grid-keys">
               <label class="field">
