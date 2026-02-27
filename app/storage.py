@@ -370,3 +370,41 @@ def save_uploaded_epub(
     target_path = book_dir / target_name
     shutil.copyfile(str(source_file_path), str(target_path))
     return target_path
+
+
+def read_book_summary_snapshot(root_dir: str | Path, *, slug: str) -> dict:
+    detail = read_book_detail(root_dir, slug=slug)
+    chapter_summaries: list[ChapterSummary] = []
+
+    for chapter in detail["chapters"]:
+        summary = extract_section(chapter["markdown"], "요약")
+        key_events = [
+            row.strip()[2:].strip()
+            for row in extract_section(chapter["markdown"], "핵심 사건").splitlines()
+            if row.strip().startswith("- ")
+        ]
+        chapter_summaries.append(
+            ChapterSummary(
+                chapter_index=chapter["index"],
+                chapter_title=chapter["title"],
+                summary=summary or "",
+                key_events=key_events,
+                character_events=[],
+                character_traits=[],
+            )
+        )
+
+    return {
+        "book_title": detail["book_title"],
+        "chapter_summaries": chapter_summaries,
+        "character_summaries_text": "\n\n".join(item["markdown"] for item in detail["characters"]),
+        "setting_markdown": detail.get("setting_markdown", ""),
+    }
+
+
+def extract_section(markdown: str, section_title: str) -> str:
+    pattern = rf"##\s+{re.escape(section_title)}\n([\s\S]*?)(\n##\s+|$)"
+    match = re.search(pattern, markdown or "", flags=re.MULTILINE)
+    if not match:
+        return ""
+    return match.group(1).strip()

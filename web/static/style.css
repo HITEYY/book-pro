@@ -478,6 +478,39 @@ body {
   font-size: 13px;
 }
 
+.ask-panel {
+  background: var(--surface-soft);
+  padding: 14px;
+}
+
+.ask-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ask-panel textarea {
+  border: 1px solid var(--line);
+  background: #fff;
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+  font-family: "Inter", sans-serif;
+  resize: vertical;
+}
+
+.ask-answer {
+  margin-top: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  min-height: 90px;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .markdown-view {
   background: var(--surface-soft);
   padding: 16px;
@@ -566,6 +599,10 @@ pre.reader-text {
   }
 
   .detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ask-row {
     grid-template-columns: 1fr;
   }
 }

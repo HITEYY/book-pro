@@ -129,12 +129,36 @@
                 <button class="tab" data-tab="character" type="button" data-i18n="tab_character">Character</button>
                 <button class="tab" data-tab="world" type="button" data-i18n="tab_world">World</button>
                 <button class="tab" data-tab="reader" type="button" data-i18n="tab_reader">Reader</button>
+                <button class="tab" data-tab="ask" type="button" data-i18n="tab_ask">Ask</button>
               </div>
 
               <div id="tab-chapter" class="tab-panel active"></div>
               <div id="tab-character" class="tab-panel"></div>
               <div id="tab-world" class="tab-panel"></div>
               <div id="tab-reader" class="tab-panel"></div>
+              <div id="tab-ask" class="tab-panel">
+                <div class="ask-panel">
+                  <div class="ask-row">
+                    <label class="field">
+                      <span data-i18n="ask_mode">Mode</span>
+                      <select id="ask-mode-select">
+                        <option value="book" data-i18n="ask_mode_book">Ask about book</option>
+                        <option value="character" data-i18n="ask_mode_character">Talk with character</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span data-i18n="ask_character">Character Name</span>
+                      <input id="ask-character-input" type="text" placeholder="예: 홍길동" />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span data-i18n="ask_question">Question</span>
+                    <textarea id="ask-question-input" rows="4" placeholder="질문을 입력하세요"></textarea>
+                  </label>
+                  <button id="ask-submit-btn" class="btn btn-primary" type="button" data-i18n="ask_submit">Ask</button>
+                  <div id="ask-answer" class="ask-answer" data-i18n="ask_empty">질문하면 답변이 표시됩니다.</div>
+                </div>
+              </div>
             </section>
 
             <aside class="panel detail-side">
