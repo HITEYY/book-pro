@@ -23,6 +23,8 @@ from app.progress import (
 )
 from app.schemas import (
     BookDetailResponse,
+    BookAskRequest,
+    BookAskResponse,
     BookListResponse,
     BookReaderResponse,
     BookSummary,
@@ -39,6 +41,7 @@ from app.storage import (
     list_books,
     read_book_detail,
     read_book_reader,
+    read_book_summary_snapshot,
     save_book_summary,
     save_chapter_summary,
     save_uploaded_epub,
@@ -574,3 +577,58 @@ def get_upload_progress_state(upload_id: str) -> UploadProgressResponse:
 def list_active_upload_progress() -> list[UploadProgressResponse]:
     rows = list_upload_progress(active_only=True)
     return [UploadProgressResponse.model_validate(row) for row in rows]
+
+
+@app.post("/books/{book_slug}/ask", response_model=BookAskResponse)
+def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
+    settings = get_settings()
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="질문을 입력해 주세요.")
+
+    mode = (payload.mode or "book").strip().lower()
+    if mode not in {"book", "character"}:
+        raise HTTPException(status_code=400, detail="mode는 book 또는 character만 가능합니다.")
+
+    character_name = (payload.character_name or "").strip() or None
+    if mode == "character" and not character_name:
+        raise HTTPException(status_code=400, detail="character 모드에서는 character_name이 필요합니다.")
+
+    try:
+        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        summarizer = _build_summarizer(
+            provider=payload.provider,
+            api_key=payload.api_key,
+            model=payload.model,
+        )
+        answer = summarizer.answer_about_book(
+            book_title=snapshot["book_title"],
+            chapter_summaries=snapshot["chapter_summaries"],
+            character_summaries_text=snapshot["character_summaries_text"],
+            setting_markdown=snapshot["setting_markdown"],
+            question=question,
+            language=(payload.language or "ko").strip() or "ko",
+            character_name=character_name if mode == "character" else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        normalized_error = _normalize_error_message(exc)
+        status_code = 400 if "API key" in normalized_error else 500
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"질문 처리 중 오류가 발생했습니다: {normalized_error}",
+        ) from exc
+
+    return BookAskResponse(
+        answer=answer,
+        mode=mode,
+        book_title=snapshot["book_title"],
+        character_name=character_name if mode == "character" else None,
+    )

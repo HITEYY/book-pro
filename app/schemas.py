@@ -161,3 +161,20 @@ class UploadProgressResponse(BaseModel):
     character_name: str | None = None
     error: str = ""
     updated_at: str
+
+
+class BookAskRequest(BaseModel):
+    question: str
+    mode: str = Field(default="book", description="book 또는 character")
+    character_name: str | None = None
+    provider: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    language: str = "ko"
+
+
+class BookAskResponse(BaseModel):
+    answer: str
+    mode: str
+    book_title: str
+    character_name: str | None = None

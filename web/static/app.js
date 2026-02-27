@@ -64,6 +64,7 @@ const I18N_MESSAGES = {
     tab_character: "캐릭터",
     tab_world: "세계관",
     tab_reader: "리더",
+    tab_ask: "질문",
     detail_subtitle_empty: "Library에서 책을 선택하면 상세 요약이 표시됩니다.",
     upload_single_btn: "EPUB 업로드",
     detail_metric_chapters_label: "챕터",
@@ -141,6 +142,16 @@ const I18N_MESSAGES = {
     settings_saved: "설정을 저장했습니다.",
     select_book_first: "먼저 Library에서 책을 선택하세요.",
     init_load_failed: "초기 로딩 실패",
+    ask_mode: "모드",
+    ask_mode_book: "책에 대해 물어보기",
+    ask_mode_character: "캐릭터와 대화하기",
+    ask_character: "캐릭터 이름",
+    ask_question: "질문",
+    ask_submit: "질문하기",
+    ask_empty: "질문하면 답변이 표시됩니다.",
+    ask_need_question: "질문을 입력하세요.",
+    ask_need_character: "캐릭터 이름을 입력하세요.",
+    ask_loading: "답변 생성 중...",
   },
   en: {
     brand_sub: "Multi-book Summary Hub",
@@ -173,6 +184,7 @@ const I18N_MESSAGES = {
     tab_character: "Character",
     tab_world: "World",
     tab_reader: "Reader",
+    tab_ask: "Ask",
     detail_subtitle_empty: "Select a book in Library to view details.",
     upload_single_btn: "Upload EPUB",
     detail_metric_chapters_label: "Chapters",
@@ -250,6 +262,16 @@ const I18N_MESSAGES = {
     settings_saved: "Settings saved.",
     select_book_first: "Select a book from Library first.",
     init_load_failed: "Initial load failed",
+    ask_mode: "Mode",
+    ask_mode_book: "Ask about book",
+    ask_mode_character: "Talk with character",
+    ask_character: "Character name",
+    ask_question: "Question",
+    ask_submit: "Ask",
+    ask_empty: "Answers will appear here.",
+    ask_need_question: "Enter a question.",
+    ask_need_character: "Enter a character name.",
+    ask_loading: "Generating answer...",
   },
   ja: {
     brand_sub: "マルチブック要約ハブ",
@@ -282,6 +304,7 @@ const I18N_MESSAGES = {
     tab_character: "キャラクター",
     tab_world: "世界観",
     tab_reader: "リーダー",
+    tab_ask: "質問",
     detail_subtitle_empty: "ライブラリで本を選択すると詳細が表示されます。",
     upload_single_btn: "EPUB アップロード",
     detail_metric_chapters_label: "章",
@@ -359,6 +382,16 @@ const I18N_MESSAGES = {
     settings_saved: "設定を保存しました。",
     select_book_first: "先に Library で本を選択してください。",
     init_load_failed: "初期読み込みに失敗しました",
+    ask_mode: "モード",
+    ask_mode_book: "本について質問",
+    ask_mode_character: "キャラクターと会話",
+    ask_character: "キャラクター名",
+    ask_question: "質問",
+    ask_submit: "質問する",
+    ask_empty: "質問すると回答が表示されます。",
+    ask_need_question: "質問を入力してください。",
+    ask_need_character: "キャラクター名を入力してください。",
+    ask_loading: "回答を生成中...",
   },
 };
 
@@ -481,6 +514,12 @@ const el = {
   tabCharacter: document.getElementById("tab-character"),
   tabWorld: document.getElementById("tab-world"),
   tabReader: document.getElementById("tab-reader"),
+  tabAsk: document.getElementById("tab-ask"),
+  askModeSelect: document.getElementById("ask-mode-select"),
+  askCharacterInput: document.getElementById("ask-character-input"),
+  askQuestionInput: document.getElementById("ask-question-input"),
+  askSubmitBtn: document.getElementById("ask-submit-btn"),
+  askAnswer: document.getElementById("ask-answer"),
 
   insightBookTitle: document.getElementById("insight-book-title"),
   insightBookStats: document.getElementById("insight-book-stats"),
@@ -972,6 +1011,8 @@ async function loadLibrary({ autoOpenFirst = false } = {}) {
 function renderBooksTable(items) {
   const pendingRows = state.pendingUploads
     .map((item) => {
+      const matched = state.items.find((book) => (book.book_title || "").trim() === (item.bookTitle || "").trim());
+      const openSlug = matched?.slug || "";
       const statusLabel =
         item.status === "processing"
           ? t("status_processing")
@@ -1002,7 +1043,7 @@ function renderBooksTable(items) {
           <td>-</td>
           <td>-</td>
           <td>-</td>
-          <td>${item.status === "processing" || item.status === "queued" ? t("table_progressing") : "-"}</td>
+          <td>${openSlug ? `<button class="inline-action" data-open-book="${escapeHtml(openSlug)}" type="button">${t("table_action_open")}</button>` : item.status === "processing" || item.status === "queued" ? t("table_progressing") : "-"}</td>
         </tr>
       `;
     })
@@ -1238,6 +1279,7 @@ function renderDetail(detail) {
 
   el.tabWorld.innerHTML = `<div class="markdown-view">${markdownToHtml(detail.setting_markdown || t("world_missing"))}</div>`;
   renderReaderPanel(state.readerCache[detail.slug] || null, detail.book_title);
+  if (el.askAnswer) el.askAnswer.textContent = t("ask_empty");
 
   setTab(state.currentTab);
 }
@@ -1251,6 +1293,7 @@ function setTab(tabName) {
   el.tabCharacter.classList.toggle("active", tabName === "character");
   el.tabWorld.classList.toggle("active", tabName === "world");
   el.tabReader.classList.toggle("active", tabName === "reader");
+  el.tabAsk.classList.toggle("active", tabName === "ask");
 }
 
 async function openBook(slug, { switchToDetail = false } = {}) {
@@ -1621,6 +1664,13 @@ function bindEvents() {
   el.uploadBooksBtn.addEventListener("click", () => openFilePicker("multi"));
   el.uploadSingleBtn.addEventListener("click", () => openFilePicker("single"));
   el.generateFromDetailBtn.addEventListener("click", () => openFilePicker("single"));
+  el.askSubmitBtn?.addEventListener("click", () => {
+    void submitAsk();
+  });
+  el.askModeSelect?.addEventListener("change", () => {
+    const isCharacter = el.askModeSelect.value === "character";
+    el.askCharacterInput.disabled = !isCharacter;
+  });
 
   el.fileInput.addEventListener("change", async () => {
     const files = Array.from(el.fileInput.files || []);
@@ -1653,6 +1703,7 @@ async function init() {
   loadSettingsFromStorage();
   bindEvents();
   setTab("chapter");
+  if (el.askCharacterInput) el.askCharacterInput.disabled = true;
   await fetchProviderModels(state.settings.selectedProvider, { force: true, silent: true });
   await restoreActiveUploads();
 
@@ -1667,3 +1718,49 @@ async function init() {
 }
 
 void init();
+
+
+async function submitAsk() {
+  const detail = state.currentBook;
+  if (!detail || !detail.slug) {
+    showToast(t("select_book_first"), true);
+    return;
+  }
+
+  const mode = (el.askModeSelect?.value || "book").trim();
+  const question = (el.askQuestionInput?.value || "").trim();
+  const characterName = (el.askCharacterInput?.value || "").trim();
+
+  if (!question) {
+    showToast(t("ask_need_question"), true);
+    return;
+  }
+  if (mode === "character" && !characterName) {
+    showToast(t("ask_need_character"), true);
+    return;
+  }
+
+  el.askAnswer.textContent = t("ask_loading");
+  el.askSubmitBtn.disabled = true;
+  try {
+    const config = getRunConfig();
+    const payload = await fetchJson(`/books/${encodeURIComponent(detail.slug)}/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        mode,
+        character_name: mode === "character" ? characterName : null,
+        provider: config.provider,
+        model: config.model,
+        api_key: config.apiKey,
+        language: config.language,
+      }),
+    });
+    el.askAnswer.textContent = payload.answer || t("summary_text_missing");
+  } catch (error) {
+    el.askAnswer.textContent = error.message || "Error";
+  } finally {
+    el.askSubmitBtn.disabled = false;
+  }
+}

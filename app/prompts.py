@@ -156,3 +156,41 @@ def build_world_prompt(
   "themes": ["핵심 테마"]
 }}
 """.strip()
+
+
+def build_book_qa_prompt(
+    *,
+    book_title: str,
+    chapter_summaries: list[ChapterSummary],
+    character_summaries_text: str,
+    setting_markdown: str,
+    question: str,
+    language: str,
+    character_name: str | None = None,
+) -> str:
+    compact = _chapter_compact_lines(chapter_summaries)
+    mode_note = (
+        f"너는 반드시 '{character_name}' 캐릭터의 말투와 관점을 최대한 흉내 내어 답해야 한다."
+        if character_name
+        else "책 내용 기반 분석가로 답하라."
+    )
+    return f"""
+책 제목: {book_title}
+질문: {question}
+{mode_note}
+결과는 반드시 {language}로 작성하라.
+
+[챕터 요약]
+{compact}
+
+[캐릭터 요약]
+{character_summaries_text}
+
+[세계관/설정]
+{setting_markdown}
+
+반드시 아래 JSON 스키마로만 답하라.
+{{
+  "answer": "질문에 대한 답변"
+}}
+""".strip()

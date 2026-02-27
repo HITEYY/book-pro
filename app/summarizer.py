@@ -10,6 +10,7 @@ from app.prompts import (
     SYSTEM_PROMPT,
     build_chapter_prompt,
     build_character_prompt,
+    build_book_qa_prompt,
     build_writing_style_prompt,
     build_world_prompt,
 )
@@ -78,6 +79,10 @@ class _WorldPayload(BaseModel):
     settings: list[str] = Field(default_factory=list)
     rules: list[str] = Field(default_factory=list)
     themes: list[str] = Field(default_factory=list)
+
+
+class _BookQaPayload(BaseModel):
+    answer: str
 
 
 class _WritingStylePayload(BaseModel):
@@ -444,6 +449,32 @@ class MultiProviderBookSummarizer:
 
         content = _extract_content_text(response.choices[0].message.content)
         return _parse_json_object(content or "{}")
+
+    def answer_about_book(
+        self,
+        *,
+        book_title: str,
+        chapter_summaries: list[ChapterSummary],
+        character_summaries_text: str,
+        setting_markdown: str,
+        question: str,
+        language: str,
+        character_name: str | None = None,
+    ) -> str:
+        prompt = build_book_qa_prompt(
+            book_title=book_title,
+            chapter_summaries=chapter_summaries,
+            character_summaries_text=character_summaries_text,
+            setting_markdown=setting_markdown,
+            question=question,
+            language=language,
+            character_name=character_name,
+        )
+        try:
+            payload = _BookQaPayload.model_validate(self._chat_json(prompt))
+            return payload.answer
+        except (ValidationError, ValueError, json.JSONDecodeError):
+            return "질문에 대한 답변을 생성하지 못했습니다. 질문을 더 구체적으로 입력해 주세요."
 
     def _summarize_chapter(
         self,
