@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     default_model: str = Field(default="gpt-4.1-mini", alias="BOOK_PRO_MODEL")
     max_chapters_per_request: int | None = Field(default=None, alias="BOOK_PRO_MAX_CHAPTERS")
     output_dir: str = Field(default="books", alias="BOOK_PRO_OUTPUT_DIR")
+    qwen_tts_api_key: str = Field(default="", alias="BOOK_PRO_QWEN_TTS_API_KEY")
+    qwen_tts_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        alias="BOOK_PRO_QWEN_TTS_BASE_URL",
+    )
+    qwen_tts_model: str = Field(default="qwen-tts-latest", alias="BOOK_PRO_QWEN_TTS_MODEL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

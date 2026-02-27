@@ -178,3 +178,35 @@ class BookAskResponse(BaseModel):
     mode: str
     book_title: str
     character_name: str | None = None
+
+
+class AudioScriptLine(BaseModel):
+    speaker: str = Field(default="narrator")
+    text: str = Field(default="")
+
+
+class AudioScriptPayload(BaseModel):
+    title: str
+    lines: List[AudioScriptLine] = Field(default_factory=list)
+
+
+class AudiobookCreateRequest(BaseModel):
+    provider: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    language: str = "ko"
+    target_minutes: int = Field(default=15, ge=3, le=180)
+    tts_api_key: str | None = None
+    tts_base_url: str | None = None
+    tts_model: str | None = None
+    narrator_voice: str = Field(default="Cherry")
+    character_voices: dict[str, str] = Field(default_factory=dict)
+
+
+class AudiobookCreateResponse(BaseModel):
+    book_slug: str
+    book_title: str
+    script_path: str
+    audio_dir: str
+    final_audio_path: str
+    line_count: int
