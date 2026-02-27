@@ -1,0 +1,42 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: book-pro
+      - generic [ref=e6]: 다권 요약 허브
+    - navigation [ref=e7]:
+      - button "라이브러리" [ref=e8] [cursor=pointer]
+      - button "설정" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - heading "정신나간 섹스 게임" [level=1] [ref=e85]
+          - paragraph [ref=e86]: "slug: book-정신나간 섹스 게임"
+        - button "EPUB 업로드" [ref=e88] [cursor=pointer]
+      - generic [ref=e89]:
+        - article [ref=e90]:
+          - generic [ref=e91]: 챕터
+          - generic [ref=e92]: "27"
+          - generic [ref=e93]: 분석된 챕터 수
+        - article [ref=e94]:
+          - generic [ref=e95]: 캐릭터
+          - generic [ref=e96]: "0"
+          - generic [ref=e97]: 추출된 캐릭터
+        - article [ref=e98]:
+          - generic [ref=e99]: 최근 업데이트
+          - generic [ref=e100]: 2026. 02. 27. 오후 03:18
+          - generic [ref=e101]: 저장 기준
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - button "챕터" [ref=e105] [cursor=pointer]
+            - button "캐릭터" [ref=e106] [cursor=pointer]
+            - button "세계관" [active] [ref=e107] [cursor=pointer]
+            - button "리더" [ref=e108] [cursor=pointer]
+            - button "질문" [ref=e109] [cursor=pointer]
+          - paragraph [ref=e256]: setting.md가 없습니다.
+        - complementary [ref=e246]:
+          - heading "빠른 인사이트" [level=2] [ref=e247]
+          - generic [ref=e248]: 정신나간 섹스 게임
+          - generic [ref=e249]: 챕터 27개 · 캐릭터 0개
+          - button "새 요약 생성" [ref=e250] [cursor=pointer]

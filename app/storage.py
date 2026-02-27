@@ -1,5 +1,7 @@
 import re
 import shutil
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +17,8 @@ from app.schemas import (
 _INVALID_CHARS_RE = re.compile(r'[\\/:*?"<>|]')
 _WHITESPACE_RE = re.compile(r"\s+")
 _CHAPTER_NAME_RE = re.compile(r"^c-(?P<index>\d+)-(?P<title>.+)\.md$")
+_CHAPTER_DIGEST_INDEX_FILE = ".chapter-digests.json"
+_READER_PROGRESS_FILE = ".reader-progress.json"
 
 
 def _slug_part(value: str, fallback: str) -> str:
@@ -138,6 +142,48 @@ def _to_iso_utc(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
 
 
+def _normalize_reader_progress_record(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        return {
+            "page": 0,
+            "total_pages": 1,
+            "ratio": 0.0,
+            "updated_at": "",
+        }
+
+    total_pages_raw = payload.get("total_pages", payload.get("totalPages", 1))
+    page_raw = payload.get("page", 0)
+    ratio_raw = payload.get("ratio")
+    updated_at_raw = payload.get("updated_at", payload.get("updatedAt", ""))
+
+    total_pages = int(total_pages_raw) if isinstance(total_pages_raw, (int, float)) else 1
+    total_pages = max(total_pages, 1)
+
+    page = int(page_raw) if isinstance(page_raw, (int, float)) else 0
+    page = max(0, min(page, total_pages - 1))
+
+    if isinstance(ratio_raw, (int, float)):
+        ratio = max(0.0, min(float(ratio_raw), 1.0))
+    else:
+        ratio = 0.0 if total_pages <= 1 else page / max(total_pages - 1, 1)
+
+    updated_at = str(updated_at_raw).strip() if isinstance(updated_at_raw, str) else ""
+
+    return {
+        "page": page,
+        "total_pages": total_pages,
+        "ratio": ratio,
+        "updated_at": updated_at,
+    }
+
+
+def compute_chapter_digest(*, chapter_title: str, chapter_text: str) -> str:
+    normalized_title = _WHITESPACE_RE.sub(" ", chapter_title or "").strip()
+    normalized_text = _WHITESPACE_RE.sub(" ", chapter_text or "").strip()
+    payload = f"{normalized_title}\n{normalized_text}".encode("utf-8", errors="ignore")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _book_dirs(root: Path) -> list[Path]:
     if not root.exists():
         return []
@@ -189,6 +235,12 @@ def list_books(root_dir: str | Path, *, page: int = 1, page_size: int = 10) -> d
         chapter_count = len(list((book_dir / "chapter").glob("*.md")))
         character_count = len(list((book_dir / "character").glob("*.md")))
         is_completed = (book_dir / "setting.md").exists()
+        if is_completed:
+            status = "completed"
+        elif chapter_count > 0 or character_count > 0:
+            status = "processing"
+        else:
+            status = "queued"
         latest_ts = _latest_markdown_timestamp(book_dir)
         books.append(
             {
@@ -196,7 +248,7 @@ def list_books(root_dir: str | Path, *, page: int = 1, page_size: int = 10) -> d
                 "book_title": _book_title_from_setting(book_dir, display_title),
                 "chapter_count": chapter_count,
                 "character_count": character_count,
-                "status": "completed" if is_completed else "processing",
+                "status": status,
                 "updated_at": _to_iso_utc(latest_ts),
                 "_latest_ts": latest_ts,
             }
@@ -313,6 +365,70 @@ def read_book_reader(root_dir: str | Path, *, slug: str) -> dict:
     }
 
 
+def read_book_reader_progress(root_dir: str | Path, *, slug: str) -> dict:
+    root = Path(root_dir)
+    book_dir = _safe_book_path(root, slug)
+    progress_path = book_dir / _READER_PROGRESS_FILE
+    if not progress_path.exists():
+        record = _normalize_reader_progress_record({})
+        return {"slug": slug, **record}
+
+    try:
+        payload = json.loads(progress_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        payload = {}
+
+    record = _normalize_reader_progress_record(payload)
+    return {"slug": slug, **record}
+
+
+def save_book_reader_progress(
+    root_dir: str | Path,
+    *,
+    slug: str,
+    page: int,
+    total_pages: int,
+    ratio: float | None = None,
+) -> dict:
+    root = Path(root_dir)
+    book_dir = _safe_book_path(root, slug)
+
+    safe_total_pages = int(total_pages) if isinstance(total_pages, (int, float)) else 1
+    safe_total_pages = max(safe_total_pages, 1)
+
+    safe_page = int(page) if isinstance(page, (int, float)) else 0
+    safe_page = max(0, min(safe_page, safe_total_pages - 1))
+
+    if isinstance(ratio, (int, float)):
+        safe_ratio = max(0.0, min(float(ratio), 1.0))
+    else:
+        safe_ratio = 0.0 if safe_total_pages <= 1 else safe_page / max(safe_total_pages - 1, 1)
+
+    record = {
+        "page": safe_page,
+        "total_pages": safe_total_pages,
+        "ratio": safe_ratio,
+        "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+    progress_path = book_dir / _READER_PROGRESS_FILE
+    progress_path.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return {"slug": slug, **record}
+
+
+def get_latest_epub_path(root_dir: str | Path, *, slug: str) -> Path:
+    root = Path(root_dir)
+    book_dir = _safe_book_path(root, slug)
+    epub_path = _latest_epub_path(book_dir)
+    if not epub_path:
+        raise FileNotFoundError(f"원문 EPUB 파일을 찾을 수 없습니다: {slug}")
+    return epub_path
+
+
 def save_book_summary(summary: BookSummary, *, root_dir: str | Path = "books") -> Path:
     root = Path(root_dir)
     book_dir = root / _book_dir_name(summary.book_title)
@@ -355,6 +471,21 @@ def ensure_book_directories(book_title: str, *, root_dir: str | Path = "books") 
     book_dir = root / _book_dir_name(book_title)
     (book_dir / "chapter").mkdir(parents=True, exist_ok=True)
     (book_dir / "character").mkdir(parents=True, exist_ok=True)
+    return book_dir
+
+
+def clear_book_summary_outputs(book_title: str, *, root_dir: str | Path = "books") -> Path:
+    book_dir = ensure_book_directories(book_title, root_dir=root_dir)
+    chapter_dir = book_dir / "chapter"
+    character_dir = book_dir / "character"
+    setting_path = book_dir / "setting.md"
+
+    for path in chapter_dir.glob("*.md"):
+        path.unlink(missing_ok=True)
+    for path in character_dir.glob("*.md"):
+        path.unlink(missing_ok=True)
+    setting_path.unlink(missing_ok=True)
+    (book_dir / _CHAPTER_DIGEST_INDEX_FILE).unlink(missing_ok=True)
     return book_dir
 
 
@@ -408,3 +539,104 @@ def extract_section(markdown: str, section_title: str) -> str:
     if not match:
         return ""
     return match.group(1).strip()
+
+
+def load_chapter_digest_index(
+    book_title: str,
+    *,
+    root_dir: str | Path = "books",
+) -> dict[int, str]:
+    root = Path(root_dir)
+    book_dir = root / _book_dir_name(book_title)
+    index_path = book_dir / _CHAPTER_DIGEST_INDEX_FILE
+    if not index_path.exists():
+        return {}
+
+    try:
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(payload, dict):
+        return {}
+
+    digest_map: dict[int, str] = {}
+    for key, value in payload.items():
+        try:
+            chapter_index = int(str(key))
+        except (TypeError, ValueError):
+            continue
+        digest = str(value or "").strip()
+        if chapter_index > 0 and digest:
+            digest_map[chapter_index] = digest
+    return digest_map
+
+
+def save_chapter_digest_index(
+    book_title: str,
+    digest_by_index: dict[int, str],
+    *,
+    root_dir: str | Path = "books",
+) -> Path:
+    book_dir = ensure_book_directories(book_title, root_dir=root_dir)
+    index_path = book_dir / _CHAPTER_DIGEST_INDEX_FILE
+    payload = {str(index): digest for index, digest in sorted(digest_by_index.items()) if index > 0 and digest}
+    index_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return index_path
+
+
+def read_saved_chapter_summaries(
+    book_title: str,
+    *,
+    root_dir: str | Path = "books",
+) -> dict[int, ChapterSummary]:
+    root = Path(root_dir)
+    book_dir = root / _book_dir_name(book_title)
+    chapter_dir = book_dir / "chapter"
+    if not chapter_dir.exists():
+        return {}
+
+    summaries: dict[int, ChapterSummary] = {}
+    for chapter_path in sorted(chapter_dir.glob("*.md"), key=_chapter_sort_key):
+        markdown = chapter_path.read_text(encoding="utf-8", errors="ignore")
+        match = _CHAPTER_NAME_RE.match(chapter_path.name)
+        chapter_index = int(match.group("index")) if match else 0
+        chapter_title = match.group("title") if match else chapter_path.stem
+
+        heading_match = re.search(r"^#\s+Chapter\s+\d+:\s*(.+)$", markdown, flags=re.MULTILINE)
+        if heading_match and heading_match.group(1).strip():
+            chapter_title = heading_match.group(1).strip()
+
+        summary_text = extract_section(markdown, "요약")
+        key_events = [
+            row.strip()[2:].strip()
+            for row in extract_section(markdown, "핵심 사건").splitlines()
+            if row.strip().startswith("- ")
+        ]
+
+        if chapter_index <= 0:
+            continue
+
+        summaries[chapter_index] = ChapterSummary(
+            chapter_index=chapter_index,
+            chapter_title=chapter_title,
+            summary=summary_text or "",
+            key_events=key_events,
+            character_events=[],
+            character_traits=[],
+        )
+    return summaries
+
+
+def prune_chapter_files(
+    book_title: str,
+    chapter_summaries: list[ChapterSummary],
+    *,
+    root_dir: str | Path = "books",
+) -> None:
+    book_dir = ensure_book_directories(book_title, root_dir=root_dir)
+    chapter_dir = book_dir / "chapter"
+    valid_names = {_chapter_file_name(chapter) for chapter in chapter_summaries}
+    for path in chapter_dir.glob("*.md"):
+        if path.name not in valid_names:
+            path.unlink(missing_ok=True)

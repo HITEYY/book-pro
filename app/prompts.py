@@ -167,6 +167,7 @@ def build_book_qa_prompt(
     question: str,
     language: str,
     character_name: str | None = None,
+    json_response: bool = True,
 ) -> str:
     compact = _chapter_compact_lines(chapter_summaries)
     mode_note = (
@@ -174,6 +175,15 @@ def build_book_qa_prompt(
         if character_name
         else "책 내용 기반 분석가로 답하라."
     )
+    response_block = (
+        """반드시 아래 JSON 스키마로만 답하라.
+{
+  "answer": "질문에 대한 답변"
+}"""
+        if json_response
+        else "JSON으로 답하지 말고, 최종 답변만 자연스러운 문장으로 작성하라."
+    )
+
     return f"""
 책 제목: {book_title}
 질문: {question}
@@ -189,8 +199,5 @@ def build_book_qa_prompt(
 [세계관/설정]
 {setting_markdown}
 
-반드시 아래 JSON 스키마로만 답하라.
-{{
-  "answer": "질문에 대한 답변"
-}}
+{response_block}
 """.strip()

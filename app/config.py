@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     default_provider: str = Field(default="openai", alias="BOOK_PRO_PROVIDER")
     default_model: str = Field(default="gpt-4.1-mini", alias="BOOK_PRO_MODEL")
     max_chapters_per_request: int | None = Field(default=None, alias="BOOK_PRO_MAX_CHAPTERS")
+    chapter_parallel: int = Field(default=3, alias="BOOK_PRO_CHAPTER_PARALLEL")
     output_dir: str = Field(default="books", alias="BOOK_PRO_OUTPUT_DIR")
     qwen_tts_api_key: str = Field(default="", alias="BOOK_PRO_QWEN_TTS_API_KEY")
     qwen_tts_base_url: str = Field(

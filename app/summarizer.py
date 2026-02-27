@@ -1,5 +1,7 @@
 import json
 import logging
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from openai import OpenAI
@@ -58,6 +60,10 @@ _PROVIDER_DEFAULT_MODEL = {
 logger = logging.getLogger("uvicorn.error")
 _REQUEST_TIMEOUT_SEC = 120.0
 _REQUEST_MAX_RETRIES = 1
+_QA_STREAM_SYSTEM_PROMPT = (
+    "You are a literary analysis assistant. "
+    "Answer directly in natural language and do not output JSON."
+)
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 ChapterSummaryCallback = Callable[[ChapterSummary], None]
@@ -133,7 +139,15 @@ def _extract_content_text(content: Any) -> str:
                 text = item.get("text")
                 if isinstance(text, str):
                     chunks.append(text)
+                    continue
+            text_attr = getattr(item, "text", None)
+            if isinstance(text_attr, str):
+                chunks.append(text_attr)
         return "\n".join(chunks)
+
+    text_attr = getattr(content, "text", None)
+    if isinstance(text_attr, str):
+        return text_attr
 
     return ""
 
@@ -208,15 +222,50 @@ class MultiProviderBookSummarizer:
         precise_analysis: bool = False,
         progress_callback: ProgressCallback | None = None,
         chapter_callback: ChapterSummaryCallback | None = None,
+        chapter_parallel: int = 1,
+    ) -> BookSummary:
+        refresh_all = {chapter.index for chapter in book.chapters}
+        return self.summarize_incremental(
+            book,
+            existing_chapter_summaries={},
+            chapters_to_refresh=refresh_all,
+            language=language,
+            precise_analysis=precise_analysis,
+            progress_callback=progress_callback,
+            chapter_callback=chapter_callback,
+            chapter_parallel=chapter_parallel,
+        )
+
+    def summarize_incremental(
+        self,
+        book: BookContent,
+        *,
+        existing_chapter_summaries: dict[int, ChapterSummary] | None = None,
+        chapters_to_refresh: set[int] | None = None,
+        language: str = "ko",
+        precise_analysis: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        chapter_callback: ChapterSummaryCallback | None = None,
+        chapter_parallel: int = 1,
     ) -> BookSummary:
         chapter_count = len(book.chapters)
-        total_steps = max(1, chapter_count + 3)
+        existing_map = existing_chapter_summaries or {}
+        refresh_set = set(chapters_to_refresh or set())
+        for chapter in book.chapters:
+            if chapter.index not in refresh_set and chapter.index not in existing_map:
+                refresh_set.add(chapter.index)
+
+        refresh_total = len(refresh_set)
+        chapter_parallel = max(1, min(int(chapter_parallel), max(refresh_total, 1)))
+        total_steps = max(1, refresh_total + 3)
         logger.info(
-            "[요약 시작] 책='%s' provider='%s' model='%s' chapters=%d precise=%s",
+            "[증분 요약 시작] 책='%s' provider='%s' model='%s' chapters=%d refresh=%d chapter_parallel=%d precise=%s",
             book.title,
             self.provider,
             self.model,
             chapter_count,
+            refresh_total,
+            chapter_parallel,
             precise_analysis,
         )
         self._emit_progress(
@@ -228,62 +277,129 @@ class MultiProviderBookSummarizer:
             chapter_total=chapter_count,
         )
 
+        refresh_chapters = [chapter for chapter in book.chapters if chapter.index in refresh_set]
+        refreshed_map: dict[int, ChapterSummary] = {}
+        refreshed = 0
+
+        if refresh_chapters and chapter_parallel > 1:
+            logger.info(
+                "[증분 요약 병렬 처리] 책='%s' refresh=%d workers=%d",
+                book.title,
+                len(refresh_chapters),
+                chapter_parallel,
+            )
+            with ThreadPoolExecutor(max_workers=chapter_parallel) as executor:
+                future_to_chapter = {
+                    executor.submit(
+                        self._summarize_chapter,
+                        chapter,
+                        language=language,
+                        precise_analysis=precise_analysis,
+                    ): chapter
+                    for chapter in refresh_chapters
+                }
+
+                for future in as_completed(future_to_chapter):
+                    chapter = future_to_chapter[future]
+                    chapter_summary = future.result()
+                    refreshed += 1
+                    refreshed_map[chapter.index] = chapter_summary
+                    self._emit_chapter_summary(chapter_callback, chapter_summary)
+
+                    chapter_done = int((refreshed / total_steps) * 100)
+                    logger.info(
+                        "[증분 요약 진행률 %3d%%] 책='%s' 챕터 요약 완료 (%d/%d): %s",
+                        chapter_done,
+                        book.title,
+                        refreshed,
+                        refresh_total,
+                        chapter.title,
+                    )
+                    self._emit_progress(
+                        progress_callback,
+                        status="processing",
+                        progress=chapter_done,
+                        stage="chapter",
+                        message="챕터 요약 완료" if not precise_analysis else "챕터 정밀 요약 완료",
+                        chapter_index=chapter.index,
+                        chapter_total=chapter_count,
+                        chapter_title=chapter.title,
+                    )
+        else:
+            for chapter in refresh_chapters:
+                refreshed += 1
+                chapter_start = int(((refreshed - 1) / total_steps) * 100)
+                logger.info(
+                    "[증분 요약 진행률 %3d%%] 책='%s' 챕터 요약 중 (%d/%d): %s",
+                    chapter_start,
+                    book.title,
+                    refreshed,
+                    refresh_total,
+                    chapter.title,
+                )
+                self._emit_progress(
+                    progress_callback,
+                    status="processing",
+                    progress=chapter_start,
+                    stage="chapter",
+                    message="챕터 요약 중" if not precise_analysis else "챕터 정밀 요약 중",
+                    chapter_index=chapter.index,
+                    chapter_total=chapter_count,
+                    chapter_title=chapter.title,
+                    character_index=None,
+                    character_total=None,
+                    character_name=None,
+                )
+                chapter_summary = self._summarize_chapter(
+                    chapter,
+                    language=language,
+                    precise_analysis=precise_analysis,
+                )
+                refreshed_map[chapter.index] = chapter_summary
+                self._emit_chapter_summary(chapter_callback, chapter_summary)
+                chapter_done = int((refreshed / total_steps) * 100)
+                logger.info(
+                    "[증분 요약 진행률 %3d%%] 책='%s' 챕터 요약 완료 (%d/%d): %s",
+                    chapter_done,
+                    book.title,
+                    refreshed,
+                    refresh_total,
+                    chapter.title,
+                )
+                self._emit_progress(
+                    progress_callback,
+                    status="processing",
+                    progress=chapter_done,
+                    stage="chapter",
+                    message="챕터 요약 완료" if not precise_analysis else "챕터 정밀 요약 완료",
+                    chapter_index=chapter.index,
+                    chapter_total=chapter_count,
+                    chapter_title=chapter.title,
+                )
+
         chapter_summaries: list[ChapterSummary] = []
+        for chapter in book.chapters:
+            if chapter.index in refresh_set:
+                chapter_summaries.append(refreshed_map[chapter.index])
+                continue
 
-        for index, chapter in enumerate(book.chapters, start=1):
-            chapter_start = int(((index - 1) / total_steps) * 100)
-            logger.info(
-                "[요약 진행률 %3d%%] 책='%s' 챕터 요약 중 (%d/%d): %s",
-                chapter_start,
-                book.title,
-                index,
-                chapter_count,
-                chapter.title,
-            )
-            self._emit_progress(
-                progress_callback,
-                status="processing",
-                progress=chapter_start,
-                stage="chapter",
-                message="챕터 요약 중" if not precise_analysis else "챕터 정밀 요약 중",
-                chapter_index=index,
-                chapter_total=chapter_count,
-                chapter_title=chapter.title,
-                character_index=None,
-                character_total=None,
-                character_name=None,
-            )
-            chapter_summary = self._summarize_chapter(
-                chapter,
-                language=language,
-                precise_analysis=precise_analysis,
-            )
-            chapter_summaries.append(chapter_summary)
-            self._emit_chapter_summary(chapter_callback, chapter_summary)
-            chapter_done = int((index / total_steps) * 100)
-            logger.info(
-                "[요약 진행률 %3d%%] 책='%s' 챕터 요약 완료 (%d/%d): %s",
-                chapter_done,
-                book.title,
-                index,
-                chapter_count,
-                chapter.title,
-            )
-            self._emit_progress(
-                progress_callback,
-                status="processing",
-                progress=chapter_done,
-                stage="chapter",
-                message="챕터 요약 완료" if not precise_analysis else "챕터 정밀 요약 완료",
-                chapter_index=index,
-                chapter_total=chapter_count,
-                chapter_title=chapter.title,
-            )
+            existing = existing_map[chapter.index]
+            if (
+                existing.chapter_index != chapter.index
+                or existing.chapter_title != chapter.title
+            ):
+                existing = existing.model_copy(
+                    update={
+                        "chapter_index": chapter.index,
+                        "chapter_title": chapter.title,
+                    }
+                )
+            chapter_summaries.append(existing)
 
-        character_step = chapter_count + 1
+        character_step = refresh_total + 1
         character_start = int(((character_step - 1) / total_steps) * 100)
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 캐릭터 요약 중",
+            "[증분 요약 진행률 %3d%%] 책='%s' 캐릭터 요약 중",
             character_start,
             book.title,
         )
@@ -313,7 +429,7 @@ class MultiProviderBookSummarizer:
                         + ((character_done - character_start) * index / total_characters)
                     )
                 logger.info(
-                    "[요약 진행률 %3d%%] 책='%s' 캐릭터 처리 중 (%d/%d): %s",
+                    "[증분 요약 진행률 %3d%%] 책='%s' 캐릭터 처리 중 (%d/%d): %s",
                     progress,
                     book.title,
                     index,
@@ -331,7 +447,7 @@ class MultiProviderBookSummarizer:
                     character_name=(character.name or "알 수 없음"),
                 )
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 캐릭터 요약 완료 (총 %d명)",
+            "[증분 요약 진행률 %3d%%] 책='%s' 캐릭터 요약 완료 (총 %d명)",
             character_done,
             book.title,
             len(character_summaries),
@@ -346,10 +462,10 @@ class MultiProviderBookSummarizer:
             character_total=len(character_summaries) if character_summaries else None,
         )
 
-        world_step = chapter_count + 2
+        world_step = refresh_total + 2
         world_start = int(((world_step - 1) / total_steps) * 100)
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 세계관 요약 중",
+            "[증분 요약 진행률 %3d%%] 책='%s' 세계관 요약 중",
             world_start,
             book.title,
         )
@@ -372,7 +488,7 @@ class MultiProviderBookSummarizer:
         )
         world_done = int((world_step / total_steps) * 100)
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 세계관 요약 완료",
+            "[증분 요약 진행률 %3d%%] 책='%s' 세계관 요약 완료",
             world_done,
             book.title,
         )
@@ -384,10 +500,10 @@ class MultiProviderBookSummarizer:
             message="세계관 요약 완료",
         )
 
-        style_step = chapter_count + 3
+        style_step = refresh_total + 3
         style_start = int(((style_step - 1) / total_steps) * 100)
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 작가 필체 분석 중",
+            "[증분 요약 진행률 %3d%%] 책='%s' 작가 필체 분석 중",
             style_start,
             book.title,
         )
@@ -405,11 +521,11 @@ class MultiProviderBookSummarizer:
         )
         style_done = int((style_step / total_steps) * 100)
         logger.info(
-            "[요약 진행률 %3d%%] 책='%s' 작가 필체 분석 완료",
+            "[증분 요약 진행률 %3d%%] 책='%s' 작가 필체 분석 완료",
             style_done,
             book.title,
         )
-        logger.info("[요약 완료] 책='%s'", book.title)
+        logger.info("[증분 요약 완료] 책='%s' refresh=%d", book.title, refresh_total)
         self._emit_progress(
             progress_callback,
             status="processing",
@@ -450,6 +566,32 @@ class MultiProviderBookSummarizer:
         content = _extract_content_text(response.choices[0].message.content)
         return _parse_json_object(content or "{}")
 
+    def _chat_text_stream(self, user_prompt: str, *, system_prompt: str) -> Iterator[str]:
+        request_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "temperature": 0.2,
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+
+        if self.provider == "openrouter":
+            request_kwargs["extra_headers"] = {
+                "HTTP-Referer": "http://localhost",
+                "X-Title": "book-pro",
+            }
+
+        stream = self.client.chat.completions.create(**request_kwargs)
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            text = _extract_content_text(getattr(delta, "content", None))
+            if text:
+                yield text
+
     def answer_about_book(
         self,
         *,
@@ -475,6 +617,36 @@ class MultiProviderBookSummarizer:
             return payload.answer
         except (ValidationError, ValueError, json.JSONDecodeError):
             return "질문에 대한 답변을 생성하지 못했습니다. 질문을 더 구체적으로 입력해 주세요."
+
+    def answer_about_book_stream(
+        self,
+        *,
+        book_title: str,
+        chapter_summaries: list[ChapterSummary],
+        character_summaries_text: str,
+        setting_markdown: str,
+        question: str,
+        language: str,
+        character_name: str | None = None,
+    ) -> Iterator[str]:
+        prompt = build_book_qa_prompt(
+            book_title=book_title,
+            chapter_summaries=chapter_summaries,
+            character_summaries_text=character_summaries_text,
+            setting_markdown=setting_markdown,
+            question=question,
+            language=language,
+            character_name=character_name,
+            json_response=False,
+        )
+
+        emitted = False
+        for text in self._chat_text_stream(prompt, system_prompt=_QA_STREAM_SYSTEM_PROMPT):
+            emitted = True
+            yield text
+
+        if not emitted:
+            yield "질문에 대한 답변을 생성하지 못했습니다. 질문을 더 구체적으로 입력해 주세요."
 
     def _summarize_chapter(
         self,

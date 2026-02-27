@@ -22,14 +22,8 @@
 
         <nav class="nav">
           <button class="nav-item active" id="nav-library" type="button" data-i18n="nav_library">Library</button>
-          <button class="nav-item" id="nav-detail" type="button" data-i18n="nav_detail">Book Detail</button>
           <button class="nav-item" id="nav-settings" type="button" data-i18n="nav_settings">Settings</button>
         </nav>
-
-        <div class="tip-box">
-          <div class="tip-title" data-i18n="tip_title">Upload Multiple EPUBs</div>
-          <p class="tip-body" data-i18n="tip_body">Upload multiple books at once and save chapter/character/world summaries per book.</p>
-        </div>
       </aside>
 
       <main class="main">
@@ -129,34 +123,40 @@
                 <button class="tab" data-tab="character" type="button" data-i18n="tab_character">Character</button>
                 <button class="tab" data-tab="world" type="button" data-i18n="tab_world">World</button>
                 <button class="tab" data-tab="reader" type="button" data-i18n="tab_reader">Reader</button>
-                <button class="tab" data-tab="ask" type="button" data-i18n="tab_ask">Ask</button>
+                <button class="tab" data-tab="ask-book" type="button" data-i18n="tab_ask_book">Ask about book</button>
+                <button class="tab" data-tab="ask-character" type="button" data-i18n="tab_ask_character">Talk with character</button>
               </div>
 
               <div id="tab-chapter" class="tab-panel active"></div>
               <div id="tab-character" class="tab-panel"></div>
               <div id="tab-world" class="tab-panel"></div>
               <div id="tab-reader" class="tab-panel"></div>
-              <div id="tab-ask" class="tab-panel">
+              <div id="tab-ask-book" class="tab-panel">
                 <div class="ask-panel">
-                  <div class="ask-row">
-                    <label class="field">
-                      <span data-i18n="ask_mode">Mode</span>
-                      <select id="ask-mode-select">
-                        <option value="book" data-i18n="ask_mode_book">Ask about book</option>
-                        <option value="character" data-i18n="ask_mode_character">Talk with character</option>
-                      </select>
-                    </label>
+                  <label class="field">
+                    <span data-i18n="ask_question">Question</span>
+                    <textarea id="ask-book-question-input" rows="4" placeholder="질문을 입력하세요"></textarea>
+                  </label>
+                  <button id="ask-book-submit-btn" class="btn btn-primary" type="button" data-i18n="ask_submit">Ask</button>
+                  <div id="ask-book-answer" class="ask-answer" data-i18n="ask_empty">질문하면 답변이 표시됩니다.</div>
+                </div>
+              </div>
+              <div id="tab-ask-character" class="tab-panel">
+                <div class="ask-panel">
+                  <div class="ask-row ask-row-single">
                     <label class="field">
                       <span data-i18n="ask_character">Character Name</span>
-                      <input id="ask-character-input" type="text" placeholder="예: 홍길동" />
+                      <select id="ask-character-select">
+                        <option value="" data-i18n="ask_character_select_placeholder">캐릭터를 선택하세요</option>
+                      </select>
                     </label>
                   </div>
                   <label class="field">
                     <span data-i18n="ask_question">Question</span>
-                    <textarea id="ask-question-input" rows="4" placeholder="질문을 입력하세요"></textarea>
+                    <textarea id="ask-character-question-input" rows="4" placeholder="질문을 입력하세요"></textarea>
                   </label>
-                  <button id="ask-submit-btn" class="btn btn-primary" type="button" data-i18n="ask_submit">Ask</button>
-                  <div id="ask-answer" class="ask-answer" data-i18n="ask_empty">질문하면 답변이 표시됩니다.</div>
+                  <button id="ask-character-submit-btn" class="btn btn-primary" type="button" data-i18n="ask_submit">Ask</button>
+                  <div id="ask-character-answer" class="ask-answer" data-i18n="ask_empty">질문하면 답변이 표시됩니다.</div>
                 </div>
               </div>
             </section>
@@ -232,9 +232,13 @@
                   value="3"
                 />
               </label>
-              <label class="field">
+              <label class="field field-switch" id="settings-precise-field">
                 <span data-i18n="settings_precise_analysis">Enable Precise Analysis</span>
                 <input id="settings-precise-analysis-input" type="checkbox" />
+              </label>
+              <label class="field field-switch" id="settings-auto-summarize-field">
+                <span data-i18n="settings_auto_summarize_upload">Auto summarize on upload</span>
+                <input id="settings-auto-summarize-upload-input" type="checkbox" />
               </label>
             </div>
             <p class="settings-hint" data-i18n="settings_hint">

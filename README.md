@@ -1,14 +1,30 @@
 # book-pro
 
-`book-pro`는 EPUB 책을 업로드하면 AI로 아래 3가지를 생성하는 API입니다.
+`book-pro` is a FastAPI service that turns EPUB books into structured AI outputs and reading assets.
 
-- 챕터 요약 (`chapter_summaries`)
-- 캐릭터 요약 (`character_summaries`)
-- 세계관 요약 (`world_summary`)
+It can generate:
+- Chapter summaries (`chapter_summaries`)
+- Character summaries (`character_summaries`)
+- World summary (`world_summary`)
+- Writing style analysis (`writing_style`)
 
-챕터 요약에는 인물별 사건(`character_events`)이 포함됩니다.
+It also provides:
+- A web panel (`/panel`) for upload, library, detail, reader, and settings
+- A page-flip style reader in Book Detail (Google Play Books-like flow)
+- Server-side reading progress persistence for cross-browser/device resume
+- Audiobook generation (LLM script + Qwen3 TTS synthesis)
 
-## 1) 설치
+## Key Features
+
+- EPUB upload and parsing
+- Incremental summarization with chapter digest reuse
+- Per-book chapter-level parallel processing (`chapter_parallel`)
+- Multi-book batch processing (`max_parallel`)
+- Reader progress API with server persistence (`.reader-progress.json`)
+- Q&A over summarized book content (`/ask`, `/ask/stream`)
+- Docker and GitHub Actions CI/CD support
+
+## 1) Installation
 
 ```bash
 python -m venv .venv
@@ -17,24 +33,39 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-`.env`에 `OPENAI_API_KEY`를 설정하세요.
-출력 경로를 바꾸고 싶으면 `BOOK_PRO_OUTPUT_DIR`를 설정하세요. 기본값은 `books`입니다.
+Set `OPENAI_API_KEY` in `.env`.
 
-## 2) 실행
+## 2) Configuration
+
+Main environment variables:
+
+- `OPENAI_API_KEY`: default API key used when request-level key is omitted
+- `BOOK_PRO_PROVIDER`: default provider (`openai`, `anthropic`, `openrouter`, `venice`, `kilo-code`)
+- `BOOK_PRO_MODEL`: default model
+- `BOOK_PRO_MAX_CHAPTERS`: optional chapter limit per request (`0`/unset = unlimited)
+- `BOOK_PRO_CHAPTER_PARALLEL`: per-book chapter workers (`1` to `8`, default `3`)
+- `BOOK_PRO_OUTPUT_DIR`: output root (default `books`)
+- `BOOK_PRO_QWEN_TTS_API_KEY`: default Qwen3 TTS key
+- `BOOK_PRO_QWEN_TTS_BASE_URL`: default Qwen3 TTS base URL
+- `BOOK_PRO_QWEN_TTS_MODEL`: default Qwen3 TTS model
+
+Note: provider aliases like `open-ai` are normalized internally.
+
+## 3) Run
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Docker 실행
+### Docker
 
-이미지 빌드:
+Build:
 
 ```bash
 docker build -t book-pro:local .
 ```
 
-컨테이너 실행:
+Run:
 
 ```bash
 docker run --rm \
@@ -44,32 +75,57 @@ docker run --rm \
   book-pro:local
 ```
 
-또는 Docker Compose:
+Or Docker Compose:
 
 ```bash
 docker compose up --build -d
 ```
 
-## 3) 사용
+## 4) URLs
 
-Swagger UI: <http://127.0.0.1:8000/docs>
-Web Panel: <http://127.0.0.1:8000/panel>
-Agent Skill: <http://127.0.0.1:8000/skill.md>
+- Swagger UI: <http://127.0.0.1:8000/docs>
+- Web Panel: <http://127.0.0.1:8000/panel>
+- Agent Skill Doc: <http://127.0.0.1:8000/skill.md>
 
-또는 `curl`:
+## 5) API Usage
+
+### Summarize a single EPUB
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/summaries/from-epub" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@/absolute/path/to/book.epub" \
-  -F "provider=open-ai" \
+  -F "provider=openai" \
   -F "model=gpt-4.1-mini" \
   -F "api_key=YOUR_PROVIDER_API_KEY" \
-  -F "language=ko"
+  -F "language=en" \
+  -F "chapter_parallel=3"
 ```
 
-여러 권 업로드:
+### Upload EPUB only (no summary yet)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/books/upload-epub" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/absolute/path/to/book.epub"
+```
+
+### Summarize an already uploaded book
+
+```bash
+curl -X POST "http://127.0.0.1:8000/books/book-your-book-slug/summaries" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "provider=openai" \
+  -F "model=gpt-4.1-mini" \
+  -F "api_key=YOUR_PROVIDER_API_KEY" \
+  -F "language=en" \
+  -F "chapter_parallel=4"
+```
+
+### Summarize multiple EPUBs (batch)
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/summaries/from-epubs" \
@@ -80,146 +136,215 @@ curl -X POST "http://127.0.0.1:8000/summaries/from-epubs" \
   -F "provider=openrouter" \
   -F "model=openai/gpt-4.1-mini" \
   -F "api_key=YOUR_PROVIDER_API_KEY" \
-  -F "language=ko"
+  -F "language=en" \
+  -F "max_parallel=2" \
+  -F "chapter_parallel=3"
 ```
 
-지원 provider:
-- `open-ai`
-- `anthropic`
-- `openrouter`
-- `venice`
-- `kilo-code`
+Concurrency behavior:
+- `max_parallel`: number of books processed at once in batch endpoint
+- `chapter_parallel`: number of chapters processed at once within each single book
 
-웹 패널에서는 `Settings` 페이지에서 아래를 설정한 뒤 업로드할 수 있습니다.
-- 기본 `Provider`
-- 기본 `Model` (리스트 선택, 필요시 직접 입력)
-- `UI Language` (`ko`, `en`, `ja`)
-- 기본 `Language`
-- Provider별 API Key (`OPEN-AI`, `ANTHROPIC`, `OpenRouter`, `Venice`, `Kilo Code`)
+### Reader API (original text)
 
-`Settings`에서 Provider를 선택하면 모델 목록을 해당 Provider API에서 자동 조회합니다.
-조회 실패 시에는 내장 기본 모델 목록을 fallback으로 사용합니다.
-EPUB 업로드를 시작하면 Library 목록에 즉시 표시되고, `요약 중` 상태와 진행 바가 함께 갱신됩니다.
-업로드가 시작되면 `books/book-[책이름]/chapter`, `books/book-[책이름]/character` 폴더가 자동 생성됩니다.
-동시에 `books/book-[책이름]/` 아래에 원본 EPUB 파일도 자동 저장됩니다.
-
-원문 읽기 API:
+Get parsed reader content:
 
 ```bash
-curl -X GET "http://127.0.0.1:8000/books/book-%EC%B1%85%EC%9D%B4%EB%A6%84/reader"
+curl -X GET "http://127.0.0.1:8000/books/book-your-book-slug/reader"
 ```
 
-오디오북 생성 API (대본 생성 -> 캐릭터별 Qwen3 TTS -> 최종 WAV 병합):
+Get server-side saved reading position:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/books/book-%EC%B1%85%EC%9D%B4%EB%A6%84/audiobook" \
+curl -X GET "http://127.0.0.1:8000/books/book-your-book-slug/reader/progress"
+```
+
+Save reading position:
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/books/book-your-book-slug/reader/progress" \
   -H "Content-Type: application/json" \
   -d '{
-    "provider": "open-ai",
+    "page": 17,
+    "total_pages": 240,
+    "ratio": 0.071
+  }'
+```
+
+Progress persistence details:
+- Saved on the server at `books/book-<title>/.reader-progress.json`
+- Web panel also keeps a local cache, then syncs to server
+- Resume works across browsers/devices as long as they use the same backend storage
+
+### Ask about a book
+
+```bash
+curl -X POST "http://127.0.0.1:8000/books/book-your-book-slug/ask" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What is the central conflict?",
+    "mode": "book",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "api_key": "YOUR_PROVIDER_API_KEY",
+    "language": "en"
+  }'
+```
+
+### Audiobook generation
+
+```bash
+curl -X POST "http://127.0.0.1:8000/books/book-your-book-slug/audiobook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "openai",
     "model": "gpt-4.1-mini",
     "api_key": "YOUR_LLM_KEY",
     "tts_api_key": "YOUR_QWEN_TTS_KEY",
     "tts_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "tts_model": "qwen-tts-latest",
     "narrator_voice": "Cherry",
-    "character_voices": {"리나": "Ethan"},
+    "character_voices": {"Lina": "Ethan"},
     "target_minutes": 20,
-    "language": "ko"
+    "language": "en"
   }'
 ```
 
-결과물은 `books/book-[책이름]/audiobook/` 아래에 저장됩니다.
-- `script.json`: 생성된 오디오북 대본
-- `segments/*.wav`: 줄 단위 캐릭터/내레이터 음성
-- `audiobook.wav`: 최종 병합 오디오북
+Outputs are stored under `books/book-<title>/audiobook/`:
+- `script.json`
+- `segments/*.wav`
+- `audiobook.wav`
 
-## 응답 구조
+## 6) Local vLLM-Omni for Qwen3 TTS
+
+If `tts_base_url` points to localhost/127.0.0.1, missing `tts_api_key` is automatically treated as `none`.
+
+1. Install `vllm-omni` (recommended: Linux + CUDA GPU):
+
+```bash
+git clone https://github.com/vllm-project/vllm-omni.git
+cd vllm-omni
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -v --no-build-isolation .
+```
+
+2. Start Qwen3-TTS server from `book-pro` root:
+
+```bash
+cd /absolute/path/to/book-pro
+source /absolute/path/to/vllm-omni/.venv/bin/activate
+./scripts/run_qwen3_tts_vllm_omni.sh
+```
+
+Optional model/port override:
+
+```bash
+QWEN3_TTS_MODEL=Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice QWEN3_TTS_PORT=8091 ./scripts/run_qwen3_tts_vllm_omni.sh
+```
+
+3. Set `.env` in `book-pro`:
+
+```bash
+BOOK_PRO_QWEN_TTS_BASE_URL=http://127.0.0.1:8091/v1
+BOOK_PRO_QWEN_TTS_MODEL=Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+BOOK_PRO_QWEN_TTS_API_KEY=none
+```
+
+## 7) Response Shape (example)
 
 ```json
 {
   "data": {
-    "book_title": "책 제목",
+    "book_title": "Book Title",
     "chapter_summaries": [
       {
         "chapter_index": 1,
-        "chapter_title": "챕터 제목",
-        "summary": "요약",
-        "key_events": ["사건"],
+        "chapter_title": "Chapter Title",
+        "summary": "...",
+        "key_events": ["..."],
         "character_events": [
           {
-            "character": "인물명",
-            "event": "일어난 일",
-            "impact": "영향"
+            "character": "Name",
+            "event": "What happened",
+            "impact": "Impact"
           }
         ],
         "character_traits": [
           {
-            "character": "인물명",
-            "traits": ["챕터에서 드러난 특징"],
-            "speech_inferences": ["대사에서 추론한 특징/심리"]
+            "character": "Name",
+            "traits": ["..."],
+            "speech_inferences": ["..."]
           }
         ]
       }
     ],
     "character_summaries": [
       {
-        "name": "이름",
-        "age": "나이",
-        "sinsang": "신상",
-        "growth_background": "성장 배경",
-        "voice": "목소리",
-        "feeling": "느낌",
-        "traits": ["특징"]
+        "name": "Name",
+        "age": "Unknown",
+        "sinsang": "Profile",
+        "growth_background": "...",
+        "voice": "...",
+        "feeling": "...",
+        "traits": ["..."]
       }
     ],
     "world_summary": {
-      "summary": "세계관 요약",
-      "settings": ["설정"],
-      "rules": ["규칙"],
-      "themes": ["테마"]
+      "summary": "...",
+      "settings": ["..."],
+      "rules": ["..."],
+      "themes": ["..."]
+    },
+    "writing_style": {
+      "summary": "...",
+      "tone": "...",
+      "sentence_style": "...",
+      "diction": "...",
+      "perspective": "...",
+      "pacing": "...",
+      "dialogue_style": "...",
+      "imagery_and_devices": ["..."],
+      "continuation_guidelines": ["..."]
     }
   }
 }
 ```
 
-## 4) 저장 폴더 구조
+## 8) Output Directory Layout
 
-요약 API 호출이 성공하면 Markdown 파일이 아래 구조로 저장됩니다.
-
-```text
-books/
-  book-[책이름]/
-    chapter/
-      c-[챕터 숫자]-[챕터 이름].md
-    character/
-      [캐릭터 이름].md
-    setting.md
-```
-
-예시:
+After successful processing, files are stored like:
 
 ```text
 books/
-  book-바람의 항구/
+  book-<title>/
+    <uploaded-book>.epub
+    .chapter-digests.json
+    .reader-progress.json
     chapter/
-      c-1-서막.md
-      c-2-유리 지구.md
+      c-<index>-<chapter-title>.md
     character/
-      리나 보스.md
-      룩 케인.md
+      <character-name>.md
     setting.md
+    audiobook/
+      script.json
+      segments/
+        *.wav
+      audiobook.wav
 ```
 
-## 참고
+## Notes
 
-- 요약 품질은 원문 품질, 챕터 분리 상태, 선택한 모델에 따라 달라집니다.
-- 기본값은 전체 챕터를 로드합니다.
-- 매우 큰 EPUB는 비용/지연을 줄이기 위해 `max_chapters`로 제한해서 호출하세요.
+- Summary quality depends on source text quality, chapter segmentation, and selected model.
+- For very large EPUBs, use `max_chapters` to reduce cost/latency.
+- Per-book chapter parallelism can be set by request (`chapter_parallel`) or env (`BOOK_PRO_CHAPTER_PARALLEL`).
+- Recommended `chapter_parallel` range is usually `2` to `4` (hard max is `8`).
 
 ## CI/CD
 
-- 워크플로우 파일: `.github/workflows/ci-cd.yml`
-- 단계:
-  1. `Test`: `pytest` 스모크 테스트 실행
-  2. `Build`: Docker 이미지 빌드 검증
-  3. `Release`: `v*` 태그 푸시 시 GitHub Release 생성 + GHCR 이미지 푸시
+Workflow file: `.github/workflows/ci-cd.yml`
+
+Pipeline stages:
+1. `Test`: run `pytest`
+2. `Build`: validate Docker image build
+3. `Release`: on `v*` tag/release, publish GHCR image and create GitHub Release

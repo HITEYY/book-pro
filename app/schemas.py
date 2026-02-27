@@ -75,6 +75,13 @@ class SummarizeResponse(BaseModel):
     data: BookSummary
 
 
+class BookUploadResponse(BaseModel):
+    slug: str
+    book_title: str
+    chapter_count: int
+    epub_path: str
+
+
 class MultiSummarizeError(BaseModel):
     file_name: str
     error: str
@@ -138,6 +145,20 @@ class BookReaderResponse(BaseModel):
     book_title: str
     chapter_count: int
     chapters: List[BookReaderChapter] = Field(default_factory=list)
+
+
+class BookReaderProgressRequest(BaseModel):
+    page: int = Field(default=0, ge=0)
+    total_pages: int = Field(default=1, ge=1)
+    ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class BookReaderProgressResponse(BaseModel):
+    slug: str
+    page: int = 0
+    total_pages: int = 1
+    ratio: float = 0.0
+    updated_at: str = ""
 
 
 class ProviderModelsResponse(BaseModel):

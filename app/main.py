@@ -1,14 +1,16 @@
 import logging
 import asyncio
 import os
+import re
 import tempfile
 from typing import Any
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi.concurrency import run_in_threadpool
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -26,6 +28,9 @@ from app.schemas import (
     BookDetailResponse,
     AudiobookCreateRequest,
     AudiobookCreateResponse,
+    BookReaderProgressRequest,
+    BookReaderProgressResponse,
+    BookUploadResponse,
     BookAskRequest,
     BookAskResponse,
     BookListResponse,
@@ -40,12 +45,20 @@ from app.schemas import (
 )
 from app.provider_models import fetch_provider_models
 from app.storage import (
+    compute_chapter_digest,
     ensure_book_directories,
+    get_latest_epub_path,
     list_books,
+    load_chapter_digest_index,
+    prune_chapter_files,
     read_book_detail,
     read_book_reader,
+    read_book_reader_progress,
+    read_saved_chapter_summaries,
     read_book_summary_snapshot,
     save_book_summary,
+    save_book_reader_progress,
+    save_chapter_digest_index,
     save_chapter_summary,
     save_uploaded_epub,
 )
@@ -57,6 +70,7 @@ WEB_DIR = BASE_DIR / "web"
 SKILL_DOC_PATH = BASE_DIR / "SKILL.md"
 logger = logging.getLogger("uvicorn.error")
 DEFAULT_MULTI_SUMMARY_PARALLEL = 3
+MAX_CHAPTER_SUMMARY_PARALLEL = 8
 
 app = FastAPI(
     title="book-pro",
@@ -162,11 +176,53 @@ def _normalize_error_message(exc: Exception) -> str:
     return text
 
 
+def _normalize_title_for_compare(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).lower()
+
+
+def _resolve_chapter_parallel(requested: int | None, default_value: int) -> int:
+    candidate = requested if requested is not None else default_value
+    if candidate <= 0:
+        candidate = 1
+    return max(1, min(int(candidate), MAX_CHAPTER_SUMMARY_PARALLEL))
+
+
+def _is_local_tts_base_url(base_url: str) -> bool:
+    candidate = (base_url or "").strip()
+    if not candidate:
+        return False
+    try:
+        host = (urlparse(candidate).hostname or "").strip().lower()
+    except ValueError:
+        return False
+    return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal"}
+
+
+def _resolve_tts_api_key(
+    *,
+    payload_tts_api_key: str | None,
+    default_tts_api_key: str,
+    tts_base_url: str,
+) -> str:
+    resolved = (payload_tts_api_key or "").strip() or (default_tts_api_key or "").strip()
+    if resolved:
+        return resolved
+
+    if _is_local_tts_base_url(tts_base_url):
+        return "none"
+
+    raise ValueError(
+        "Qwen3 TTS API key가 필요합니다. tts_api_key 또는 BOOK_PRO_QWEN_TTS_API_KEY를 설정하세요. "
+        "로컬 vLLM-Omni(localhost) 사용 시에는 API key 없이 자동으로 'none' 값을 사용합니다."
+    )
+
+
 async def _summarize_upload(
     file: UploadFile,
     *,
     summarizer: MultiProviderBookSummarizer,
     chapter_limit: int | None,
+    chapter_parallel: int,
     language: str,
     precise_analysis: bool,
     output_dir: str,
@@ -192,11 +248,12 @@ async def _summarize_upload(
     temp_path: str | None = None
     try:
         logger.info(
-            "[업로드 시작] file='%s' provider='%s' model='%s' precise=%s",
+            "[업로드 시작] file='%s' provider='%s' model='%s' precise=%s chapter_parallel=%d",
             file.filename,
             summarizer.provider,
             summarizer.model,
             precise_analysis,
+            chapter_parallel,
         )
         suffix = Path(file.filename).suffix or ".epub"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -219,6 +276,7 @@ async def _summarize_upload(
             file.filename,
             summarizer,
             chapter_limit,
+            chapter_parallel,
             language,
             precise_analysis,
             output_dir,
@@ -240,6 +298,7 @@ def _summarize_from_temp_path(
     original_filename: str,
     summarizer: MultiProviderBookSummarizer,
     chapter_limit: int | None,
+    chapter_parallel: int,
     language: str,
     precise_analysis: bool,
     output_dir: str,
@@ -306,6 +365,57 @@ def _summarize_from_temp_path(
             book_title=book.title,
         )
 
+    previous_digest_map = load_chapter_digest_index(book.title, root_dir=output_dir)
+    previous_summary_map = read_saved_chapter_summaries(book.title, root_dir=output_dir)
+    previous_summary_by_digest: dict[str, ChapterSummary] = {}
+    for index, digest in previous_digest_map.items():
+        chapter_summary = previous_summary_map.get(index)
+        if chapter_summary and digest and digest not in previous_summary_by_digest:
+            previous_summary_by_digest[digest] = chapter_summary
+
+    digest_map: dict[int, str] = {}
+    reusable_summary_map: dict[int, ChapterSummary] = {}
+    refresh_indexes: set[int] = set()
+    for chapter in book.chapters:
+        digest = compute_chapter_digest(chapter_title=chapter.title, chapter_text=chapter.text)
+        digest_map[chapter.index] = digest
+
+        reusable = None
+        if previous_digest_map.get(chapter.index) == digest:
+            reusable = previous_summary_map.get(chapter.index)
+        if reusable is None:
+            reusable = previous_summary_by_digest.get(digest)
+        if reusable is None and chapter.index not in previous_digest_map:
+            existing_by_index = previous_summary_map.get(chapter.index)
+            if (
+                existing_by_index
+                and _normalize_title_for_compare(existing_by_index.chapter_title)
+                == _normalize_title_for_compare(chapter.title)
+            ):
+                reusable = existing_by_index
+
+        if reusable is None:
+            refresh_indexes.add(chapter.index)
+            continue
+
+        if reusable.chapter_index != chapter.index or reusable.chapter_title != chapter.title:
+            reusable = reusable.model_copy(
+                update={
+                    "chapter_index": chapter.index,
+                    "chapter_title": chapter.title,
+                }
+            )
+        reusable_summary_map[chapter.index] = reusable
+
+    logger.info(
+        "[증분 판정] title='%s' total=%d refresh=%d reuse=%d",
+        book.title,
+        len(book.chapters),
+        len(refresh_indexes),
+        len(reusable_summary_map),
+    )
+    digest_index_in_progress = dict(previous_digest_map)
+
     def on_progress(payload: dict[str, Any]) -> None:
         if not upload_id:
             return
@@ -316,6 +426,14 @@ def _summarize_from_temp_path(
         )
 
     def on_chapter_summary(chapter_summary: ChapterSummary) -> None:
+        chapter_digest = digest_map.get(chapter_summary.chapter_index, "")
+        if chapter_digest:
+            digest_index_in_progress[chapter_summary.chapter_index] = chapter_digest
+            save_chapter_digest_index(
+                book.title,
+                digest_index_in_progress,
+                root_dir=output_dir,
+            )
         chapter_path = save_chapter_summary(
             book.title,
             chapter_summary,
@@ -328,12 +446,15 @@ def _summarize_from_temp_path(
             chapter_path,
         )
 
-    summary = summarizer.summarize(
+    summary = summarizer.summarize_incremental(
         book,
+        existing_chapter_summaries=reusable_summary_map,
+        chapters_to_refresh=refresh_indexes,
         language=language,
         precise_analysis=precise_analysis,
         progress_callback=on_progress,
         chapter_callback=on_chapter_summary,
+        chapter_parallel=chapter_parallel,
     )
     if upload_id:
         update_upload_progress(
@@ -345,6 +466,8 @@ def _summarize_from_temp_path(
             book_title=summary.book_title,
         )
     saved_dir = save_book_summary(summary, root_dir=output_dir)
+    prune_chapter_files(summary.book_title, summary.chapter_summaries, root_dir=output_dir)
+    save_chapter_digest_index(summary.book_title, digest_map, root_dir=output_dir)
     logger.info(
         "[업로드 완료] file='%s' title='%s' saved_dir='%s'",
         original_filename,
@@ -367,6 +490,7 @@ async def summarize_from_epub(
     language: str = Form(default="ko"),
     precise_analysis: bool = Form(default=False),
     max_chapters: int | None = Form(default=None),
+    chapter_parallel: int | None = Form(default=None),
 ) -> SummarizeResponse:
     settings = get_settings()
     chapter_limit = (
@@ -376,18 +500,21 @@ async def summarize_from_epub(
     )
     if chapter_limit is not None and chapter_limit <= 0:
         chapter_limit = None
+    resolved_chapter_parallel = _resolve_chapter_parallel(chapter_parallel, settings.chapter_parallel)
 
     try:
         logger.info(
-            "[요청 시작] /summaries/from-epub file='%s' precise=%s",
+            "[요청 시작] /summaries/from-epub file='%s' precise=%s chapter_parallel=%d",
             file.filename or "unknown.epub",
             precise_analysis,
+            resolved_chapter_parallel,
         )
         summarizer = _build_summarizer(provider=provider, api_key=api_key, model=model)
         summary = await _summarize_upload(
             file,
             summarizer=summarizer,
             chapter_limit=chapter_limit,
+            chapter_parallel=resolved_chapter_parallel,
             language=language,
             precise_analysis=precise_analysis,
             output_dir=settings.output_dir,
@@ -411,6 +538,151 @@ async def summarize_from_epub(
         ) from exc
 
 
+@app.post("/books/upload-epub", response_model=BookUploadResponse)
+async def upload_epub_only(
+    file: UploadFile = File(..., description="저장할 EPUB 파일"),
+) -> BookUploadResponse:
+    settings = get_settings()
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="파일 이름이 없습니다.")
+    if not file.filename.lower().endswith(".epub"):
+        raise HTTPException(status_code=400, detail=".epub 파일만 업로드할 수 있습니다.")
+
+    temp_path: str | None = None
+    try:
+        logger.info("[요청 시작] /books/upload-epub file='%s'", file.filename)
+        suffix = Path(file.filename).suffix or ".epub"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            temp_path = tmp.name
+
+        book = await run_in_threadpool(parse_epub, temp_path)
+        saved_epub = save_uploaded_epub(
+            book.title,
+            source_file_path=temp_path,
+            original_filename=file.filename,
+            root_dir=settings.output_dir,
+        )
+        book_dir = ensure_book_directories(book.title, root_dir=settings.output_dir)
+        logger.info(
+            "[요청 완료] /books/upload-epub title='%s' slug='%s' path='%s'",
+            book.title,
+            book_dir.name,
+            saved_epub,
+        )
+        return BookUploadResponse(
+            slug=book_dir.name,
+            book_title=book.title,
+            chapter_count=len(book.chapters),
+            epub_path=str(saved_epub),
+        )
+    except ValueError as exc:
+        logger.warning("[요청 오류] /books/upload-epub error='%s'", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[요청 실패] /books/upload-epub")
+        raise HTTPException(status_code=500, detail=f"EPUB 업로드 중 오류가 발생했습니다: {exc}") from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@app.post("/books/{book_slug}/summaries", response_model=SummarizeResponse)
+async def summarize_existing_book(
+    book_slug: str,
+    upload_id: str | None = Form(default=None),
+    provider: str | None = Form(default=None),
+    api_key: str | None = Form(default=None),
+    model: str | None = Form(default=None),
+    language: str = Form(default="ko"),
+    precise_analysis: bool = Form(default=False),
+    max_chapters: int | None = Form(default=None),
+    chapter_parallel: int | None = Form(default=None),
+) -> SummarizeResponse:
+    settings = get_settings()
+    chapter_limit = (
+        max_chapters
+        if max_chapters is not None
+        else settings.max_chapters_per_request
+    )
+    if chapter_limit is not None and chapter_limit <= 0:
+        chapter_limit = None
+    resolved_chapter_parallel = _resolve_chapter_parallel(chapter_parallel, settings.chapter_parallel)
+
+    try:
+        epub_path = get_latest_epub_path(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    upload_key = (upload_id or "").strip() or None
+    if upload_key:
+        init_upload_progress(upload_key, file_name=epub_path.name)
+        update_upload_progress(
+            upload_key,
+            status="processing",
+            progress=1,
+            stage="start",
+            message="요약 시작",
+        )
+
+    temp_path: str | None = None
+    try:
+        logger.info(
+            "[요청 시작] /books/%s/summaries file='%s' precise=%s chapter_parallel=%d",
+            book_slug,
+            epub_path.name,
+            precise_analysis,
+            resolved_chapter_parallel,
+        )
+        summarizer = _build_summarizer(provider=provider, api_key=api_key, model=model)
+
+        suffix = epub_path.suffix or ".epub"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(epub_path.read_bytes())
+            temp_path = tmp.name
+
+        summary = await run_in_threadpool(
+            _summarize_from_temp_path,
+            temp_path,
+            epub_path.name,
+            summarizer,
+            chapter_limit,
+            resolved_chapter_parallel,
+            language,
+            precise_analysis,
+            settings.output_dir,
+            upload_key,
+        )
+        logger.info(
+            "[요청 완료] /books/%s/summaries title='%s'",
+            book_slug,
+            summary.book_title,
+        )
+        return SummarizeResponse(data=summary)
+    except ValueError as exc:
+        logger.warning("[요청 오류] /books/%s/summaries error='%s'", book_slug, exc)
+        if upload_key:
+            fail_upload_progress(upload_key, error=_normalize_error_message(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[요청 실패] /books/%s/summaries", book_slug)
+        normalized_error = _normalize_error_message(exc)
+        if upload_key:
+            fail_upload_progress(upload_key, error=normalized_error)
+        status_code = 400 if "API key" in normalized_error else 500
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"요약 생성 중 오류가 발생했습니다: {normalized_error}",
+        ) from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 @app.post("/summaries/from-epubs", response_model=MultiSummarizeResponse)
 async def summarize_from_epubs(
     files: list[UploadFile] = File(..., description="요약할 EPUB 파일들"),
@@ -421,6 +693,7 @@ async def summarize_from_epubs(
     precise_analysis: bool = Form(default=False),
     max_chapters: int | None = Form(default=None),
     max_parallel: int | None = Form(default=None),
+    chapter_parallel: int | None = Form(default=None),
 ) -> MultiSummarizeResponse:
     if not files:
         raise HTTPException(status_code=400, detail="최소 1개 이상의 파일이 필요합니다.")
@@ -433,6 +706,7 @@ async def summarize_from_epubs(
     )
     if chapter_limit is not None and chapter_limit <= 0:
         chapter_limit = None
+    resolved_chapter_parallel = _resolve_chapter_parallel(chapter_parallel, settings.chapter_parallel)
 
     try:
         _build_summarizer(provider=provider, api_key=api_key, model=model)
@@ -446,9 +720,10 @@ async def summarize_from_epubs(
     parallel = max_parallel or DEFAULT_MULTI_SUMMARY_PARALLEL
     parallel = max(1, min(parallel, total_files))
     logger.info(
-        "[배치 요청 시작] /summaries/from-epubs files=%d parallel=%d precise=%s",
+        "[배치 요청 시작] /summaries/from-epubs files=%d parallel=%d chapter_parallel=%d precise=%s",
         total_files,
         parallel,
+        resolved_chapter_parallel,
         precise_analysis,
     )
 
@@ -465,6 +740,7 @@ async def summarize_from_epubs(
                     file,
                     summarizer=summarizer,
                     chapter_limit=chapter_limit,
+                    chapter_parallel=resolved_chapter_parallel,
                     language=language,
                     precise_analysis=precise_analysis,
                     output_dir=settings.output_dir,
@@ -553,6 +829,43 @@ def get_book_reader(book_slug: str) -> BookReaderResponse:
     return BookReaderResponse.model_validate(payload)
 
 
+@app.get("/books/{book_slug}/reader/progress", response_model=BookReaderProgressResponse)
+def get_book_reader_progress(book_slug: str) -> BookReaderProgressResponse:
+    settings = get_settings()
+
+    try:
+        payload = read_book_reader_progress(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return BookReaderProgressResponse.model_validate(payload)
+
+
+@app.put("/books/{book_slug}/reader/progress", response_model=BookReaderProgressResponse)
+def put_book_reader_progress(
+    book_slug: str,
+    payload: BookReaderProgressRequest,
+) -> BookReaderProgressResponse:
+    settings = get_settings()
+
+    try:
+        saved = save_book_reader_progress(
+            settings.output_dir,
+            slug=book_slug,
+            page=payload.page,
+            total_pages=payload.total_pages,
+            ratio=payload.ratio,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return BookReaderProgressResponse.model_validate(saved)
+
+
 @app.get("/uploads/{upload_id}/progress", response_model=UploadProgressResponse)
 def get_upload_progress_state(upload_id: str) -> UploadProgressResponse:
     payload = get_upload_progress(upload_id)
@@ -638,6 +951,67 @@ def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
     )
 
 
+@app.post("/books/{book_slug}/ask/stream")
+def ask_about_book_stream(book_slug: str, payload: BookAskRequest) -> StreamingResponse:
+    settings = get_settings()
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="질문을 입력해 주세요.")
+
+    mode = (payload.mode or "book").strip().lower()
+    if mode not in {"book", "character"}:
+        raise HTTPException(status_code=400, detail="mode는 book 또는 character만 가능합니다.")
+
+    character_name = (payload.character_name or "").strip() or None
+    if mode == "character" and not character_name:
+        raise HTTPException(status_code=400, detail="character 모드에서는 character_name이 필요합니다.")
+
+    try:
+        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        summarizer = _build_summarizer(
+            provider=payload.provider,
+            api_key=payload.api_key,
+            model=payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    language = (payload.language or "ko").strip() or "ko"
+
+    def _iter_chunks() -> Any:
+        try:
+            for chunk in summarizer.answer_about_book_stream(
+                book_title=snapshot["book_title"],
+                chapter_summaries=snapshot["chapter_summaries"],
+                character_summaries_text=snapshot["character_summaries_text"],
+                setting_markdown=snapshot["setting_markdown"],
+                question=question,
+                language=language,
+                character_name=character_name if mode == "character" else None,
+            ):
+                if chunk:
+                    yield chunk
+        except Exception as exc:  # noqa: BLE001
+            normalized_error = _normalize_error_message(exc)
+            logger.exception("[스트림 질문 실패] /books/%s/ask/stream", book_slug)
+            yield f"\n\n[오류] 질문 처리 중 오류가 발생했습니다: {normalized_error}"
+
+    return StreamingResponse(
+        _iter_chunks(),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/books/{book_slug}/audiobook", response_model=AudiobookCreateResponse)
 def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> AudiobookCreateResponse:
     settings = get_settings()
@@ -656,11 +1030,13 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
             model=payload.model,
         )
 
-        tts_api_key = (payload.tts_api_key or "").strip() or settings.qwen_tts_api_key
-        if not tts_api_key:
-            raise ValueError("Qwen3 TTS API key가 필요합니다. tts_api_key 또는 BOOK_PRO_QWEN_TTS_API_KEY를 설정하세요.")
         tts_base_url = (payload.tts_base_url or "").strip() or settings.qwen_tts_base_url
         tts_model = (payload.tts_model or "").strip() or settings.qwen_tts_model
+        tts_api_key = _resolve_tts_api_key(
+            payload_tts_api_key=payload.tts_api_key,
+            default_tts_api_key=settings.qwen_tts_api_key,
+            tts_base_url=tts_base_url,
+        )
 
         tts_client = OpenAI(api_key=tts_api_key, base_url=tts_base_url)
         generator = AudiobookGenerator(
