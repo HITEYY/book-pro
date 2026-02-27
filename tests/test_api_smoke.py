@@ -45,3 +45,14 @@ def test_book_ask_character_requires_name() -> None:
     )
     assert response.status_code == 400
     assert "character_name" in response.json()["detail"]
+
+
+def test_create_audiobook_requires_existing_book() -> None:
+    response = client.post(
+        "/books/book-missing/audiobook",
+        json={
+            "api_key": "test-key",
+            "tts_api_key": "test-tts-key",
+        },
+    )
+    assert response.status_code == 404

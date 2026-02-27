@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.audiobook import AudiobookGenerator
 from app.epub_parser import parse_epub
 from app.progress import (
     complete_upload_progress,
@@ -23,6 +24,8 @@ from app.progress import (
 )
 from app.schemas import (
     BookDetailResponse,
+    AudiobookCreateRequest,
+    AudiobookCreateResponse,
     BookAskRequest,
     BookAskResponse,
     BookListResponse,
@@ -47,6 +50,7 @@ from app.storage import (
     save_uploaded_epub,
 )
 from app.summarizer import MultiProviderBookSummarizer, normalize_provider
+from openai import OpenAI
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
@@ -631,4 +635,67 @@ def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
         mode=mode,
         book_title=snapshot["book_title"],
         character_name=character_name if mode == "character" else None,
+    )
+
+
+@app.post("/books/{book_slug}/audiobook", response_model=AudiobookCreateResponse)
+def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> AudiobookCreateResponse:
+    settings = get_settings()
+
+    try:
+        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        llm_summarizer = _build_summarizer(
+            provider=payload.provider,
+            api_key=payload.api_key,
+            model=payload.model,
+        )
+
+        tts_api_key = (payload.tts_api_key or "").strip() or settings.qwen_tts_api_key
+        if not tts_api_key:
+            raise ValueError("Qwen3 TTS API key가 필요합니다. tts_api_key 또는 BOOK_PRO_QWEN_TTS_API_KEY를 설정하세요.")
+        tts_base_url = (payload.tts_base_url or "").strip() or settings.qwen_tts_base_url
+        tts_model = (payload.tts_model or "").strip() or settings.qwen_tts_model
+
+        tts_client = OpenAI(api_key=tts_api_key, base_url=tts_base_url)
+        generator = AudiobookGenerator(
+            llm_client=llm_summarizer.client,
+            llm_model=llm_summarizer.model,
+            tts_client=tts_client,
+            tts_model=tts_model,
+        )
+
+        script = generator.generate_script(
+            book_title=snapshot["book_title"],
+            chapter_summaries=snapshot["chapter_summaries"],
+            character_summaries_text=snapshot["character_summaries_text"],
+            language=payload.language,
+            target_minutes=payload.target_minutes,
+        )
+
+        output_dir = Path(settings.output_dir) / book_slug / "audiobook"
+        script_path, segment_dir, final_audio_path = generator.synthesize(
+            script=script,
+            out_dir=output_dir,
+            narrator_voice=payload.narrator_voice,
+            character_voices=payload.character_voices,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[오디오북 생성 실패] slug='%s'", book_slug)
+        raise HTTPException(status_code=500, detail=f"오디오북 생성 중 오류: {exc}") from exc
+
+    return AudiobookCreateResponse(
+        book_slug=book_slug,
+        book_title=snapshot["book_title"],
+        script_path=str(script_path),
+        audio_dir=str(segment_dir),
+        final_audio_path=str(final_audio_path),
+        line_count=len(script.lines),
     )
