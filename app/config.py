@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         default="https://dashscope.aliyuncs.com/compatible-mode/v1",
         alias="BOOK_PRO_QWEN_TTS_BASE_URL",
     )
-    qwen_tts_model: str = Field(default="qwen-tts-latest", alias="BOOK_PRO_QWEN_TTS_MODEL")
+    qwen_tts_model: str = Field(default="qwen3-tts-vc-2026-01-22", alias="BOOK_PRO_QWEN_TTS_MODEL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -12,7 +12,7 @@ It also provides:
 - A web panel (`/panel`) for upload, library, detail, reader, and settings
 - A page-flip style reader in Book Detail (Google Play Books-like flow)
 - Server-side reading progress persistence for cross-browser/device resume
-- Audiobook generation (LLM script + Qwen3 TTS synthesis)
+- Audiobook generation (chapter scripts + Qwen3 Voice Design + Base Voice Clone + TTS synthesis)
 
 ## Key Features
 
@@ -202,9 +202,17 @@ curl -X POST "http://127.0.0.1:8000/books/book-your-book-slug/audiobook" \
     "api_key": "YOUR_LLM_KEY",
     "tts_api_key": "YOUR_QWEN_TTS_KEY",
     "tts_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "tts_model": "qwen-tts-latest",
+    "tts_model": "qwen3-tts-vc-2026-01-22",
     "narrator_voice": "Cherry",
-    "character_voices": {"Lina": "Ethan"},
+    "character_voices": {},
+    "character_voice_prompts": {
+      "Lina": "차분하지만 강인한 여성 톤, 중간 속도, 문장 끝을 또렷하게"
+    },
+    "enable_voice_design": true,
+    "enable_base_voice_clone": true,
+    "voice_design_model": "qwen-voice-design",
+    "voice_clone_model": "qwen-voice-enrollment",
+    "voice_target_model": "qwen3-tts-vc-2026-01-22",
     "target_minutes": 20,
     "language": "en"
   }'
@@ -212,8 +220,18 @@ curl -X POST "http://127.0.0.1:8000/books/book-your-book-slug/audiobook" \
 
 Outputs are stored under `books/book-<title>/audiobook/`:
 - `script.json`
-- `segments/*.wav`
+- `chapter-scripts/c-*.json`
+- `voices.json`
+- `voice-previews/*.wav`
+- `segments/c-*/0001-*.wav`
+- `chapters/c-*.wav`
 - `audiobook.wav`
+
+Pipeline summary:
+- `LLM`: chapter-wise script generation (`script.json`)
+- `Qwen3 Voice Design`: character voice design shared across all chapters
+- `Qwen3 Base Voice Clone`: clone the designed base voices
+- `Qwen3 TTS synthesis`: per-line -> per-chapter -> final audiobook merge
 
 ## 6) Local vLLM-Omni for Qwen3 TTS
 
@@ -328,8 +346,16 @@ books/
     setting.md
     audiobook/
       script.json
-      segments/
+      chapter-scripts/
+        c-*.json
+      voices.json
+      voice-previews/
         *.wav
+      segments/
+        c-*/
+          0001-*.wav
+      chapters/
+        c-*.wav
       audiobook.wav
 ```
 

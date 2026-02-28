@@ -222,12 +222,24 @@ class AudiobookCreateRequest(BaseModel):
     tts_model: str | None = None
     narrator_voice: str = Field(default="Cherry")
     character_voices: dict[str, str] = Field(default_factory=dict)
+    character_voice_prompts: dict[str, str] = Field(default_factory=dict)
+    enable_voice_design: bool = True
+    enable_base_voice_clone: bool = True
+    voice_design_model: str = "qwen-voice-design"
+    voice_clone_model: str = "qwen-voice-enrollment"
+    voice_target_model: str | None = None
 
 
 class AudiobookCreateResponse(BaseModel):
     book_slug: str
     book_title: str
     script_path: str
+    script_bundle_path: str
+    chapter_script_dir: str
     audio_dir: str
+    chapter_audio_dir: str
+    voice_profile_path: str
     final_audio_path: str
     line_count: int
+    chapter_count: int
+    voice_count: int

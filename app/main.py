@@ -1044,9 +1044,11 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
             llm_model=llm_summarizer.model,
             tts_client=tts_client,
             tts_model=tts_model,
+            tts_base_url=tts_base_url,
+            tts_api_key=tts_api_key,
         )
 
-        script = generator.generate_script(
+        script_bundle = generator.generate_chapter_scripts(
             book_title=snapshot["book_title"],
             chapter_summaries=snapshot["chapter_summaries"],
             character_summaries_text=snapshot["character_summaries_text"],
@@ -1055,11 +1057,20 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
         )
 
         output_dir = Path(settings.output_dir) / book_slug / "audiobook"
-        script_path, segment_dir, final_audio_path = generator.synthesize(
-            script=script,
+        synthesis = generator.synthesize(
+            script_bundle=script_bundle,
             out_dir=output_dir,
+            book_title=snapshot["book_title"],
+            language=payload.language,
             narrator_voice=payload.narrator_voice,
             character_voices=payload.character_voices,
+            character_summaries_text=snapshot["character_summaries_text"],
+            character_voice_prompts=payload.character_voice_prompts,
+            enable_voice_design=payload.enable_voice_design,
+            enable_base_voice_clone=payload.enable_base_voice_clone,
+            voice_design_model=payload.voice_design_model,
+            voice_clone_model=payload.voice_clone_model,
+            voice_target_model=(payload.voice_target_model or "").strip() or tts_model,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1070,8 +1081,14 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
     return AudiobookCreateResponse(
         book_slug=book_slug,
         book_title=snapshot["book_title"],
-        script_path=str(script_path),
-        audio_dir=str(segment_dir),
-        final_audio_path=str(final_audio_path),
-        line_count=len(script.lines),
+        script_path=str(synthesis.script_bundle_path),
+        script_bundle_path=str(synthesis.script_bundle_path),
+        chapter_script_dir=str(synthesis.chapter_script_dir),
+        audio_dir=str(synthesis.segment_dir),
+        chapter_audio_dir=str(synthesis.chapter_audio_dir),
+        voice_profile_path=str(synthesis.voice_profile_path),
+        final_audio_path=str(synthesis.final_audio_path),
+        line_count=synthesis.line_count,
+        chapter_count=synthesis.chapter_count,
+        voice_count=synthesis.voice_count,
     )
