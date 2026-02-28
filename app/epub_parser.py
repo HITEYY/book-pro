@@ -7,10 +7,37 @@ from ebooklib import ITEM_DOCUMENT, epub
 from app.models import BookContent, Chapter
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_SUSPECT_ENCODED_TOKEN_RE = re.compile(r"[A-Za-z0-9+/=]{72,}")
 
 
 def _normalize_text(text: str) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip()
+
+
+def _is_encoded_noise_token(token: str) -> bool:
+    if not token:
+        return False
+    if not _SUSPECT_ENCODED_TOKEN_RE.fullmatch(token):
+        return False
+    has_upper = any(ch.isupper() for ch in token)
+    has_lower = any(ch.islower() for ch in token)
+    has_digit = any(ch.isdigit() for ch in token)
+    return has_upper and has_lower and has_digit
+
+
+def _strip_encoded_noise_tokens(text: str) -> str:
+    if not text:
+        return ""
+
+    def _replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return "" if _is_encoded_noise_token(token) else token
+
+    return _SUSPECT_ENCODED_TOKEN_RE.sub(_replace, text)
+
+
+def _sanitize_extracted_text(text: str) -> str:
+    return _normalize_text(_strip_encoded_noise_tokens(text))
 
 
 def _extract_title(soup: BeautifulSoup, fallback: str) -> str:
@@ -29,14 +56,14 @@ def _extract_readable_text(soup: BeautifulSoup) -> str:
     lines: list[str] = []
 
     for block in blocks:
-        text = _normalize_text(block.get_text(" ", strip=True))
+        text = _sanitize_extracted_text(block.get_text(" ", strip=True))
         if text:
             lines.append(text)
 
     if lines:
         return "\n\n".join(lines)
 
-    return _normalize_text(soup.get_text(" ", strip=True))
+    return _sanitize_extracted_text(soup.get_text(" ", strip=True))
 
 
 def _extract_book_title_from_metadata(book: epub.EpubBook) -> str:
@@ -114,7 +141,7 @@ def parse_epub(
             text = _extract_readable_text(soup)
             word_count = len(_normalize_text(text).split())
         else:
-            text = _normalize_text(soup.get_text(" ", strip=True))
+            text = _sanitize_extracted_text(soup.get_text(" ", strip=True))
             word_count = len(text.split())
         if not text:
             continue

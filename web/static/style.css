@@ -717,6 +717,8 @@ body {
   font-family: "Inter", sans-serif;
   font-size: 15px;
   line-height: 1.9;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .reader-flow-chapter {

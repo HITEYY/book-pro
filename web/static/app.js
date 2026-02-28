@@ -1684,14 +1684,21 @@ function renderReaderPanel(reader, fallbackTitle = "") {
     const previousRatio =
       runtime.totalPages <= 1 ? 0 : runtime.currentPage / Math.max(1, runtime.totalPages - 1);
 
-    const viewportWidth = Math.max(1, viewport.clientWidth);
+    const viewportStyle = window.getComputedStyle(viewport);
+    const paddingLeft = Number.parseFloat(viewportStyle.paddingLeft);
+    const paddingRight = Number.parseFloat(viewportStyle.paddingRight);
+    const horizontalPadding =
+      (Number.isFinite(paddingLeft) ? paddingLeft : 0) + (Number.isFinite(paddingRight) ? paddingRight : 0);
+
+    // column-width should match the inner readable area, not the padded scroll container width.
+    const viewportWidth = Math.max(1, viewport.clientWidth - horizontalPadding);
     viewport.style.setProperty("--reader-page-width", `${viewportWidth}px`);
 
-    const rawGap = window.getComputedStyle(viewport).getPropertyValue("--reader-page-gap");
+    const rawGap = viewportStyle.getPropertyValue("--reader-page-gap");
     const pageGap = Number.parseFloat(rawGap);
-    runtime.pageStep = viewportWidth + (Number.isFinite(pageGap) ? pageGap : 40);
+    runtime.pageStep = Math.max(1, viewportWidth + (Number.isFinite(pageGap) ? pageGap : 40));
 
-    const maxScroll = Math.max(0, viewport.scrollWidth - viewportWidth);
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
     runtime.totalPages = Math.max(1, Math.floor(maxScroll / runtime.pageStep) + 1);
     updateChapterMarkers();
 

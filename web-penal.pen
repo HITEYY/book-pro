@@ -4971,13 +4971,61 @@
                           "id": "GEH53",
                           "name": "reader-card",
                           "width": "fill_container",
-                          "height": "fill_container",
                           "fill": "#FAFAFA",
                           "cornerRadius": 8,
                           "layout": "vertical",
                           "gap": 10,
                           "padding": 16,
                           "children": [
+                            {
+                              "type": "frame",
+                              "id": "h28MQ",
+                              "name": "reader-toolbar",
+                              "width": "fill_container",
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E5E5"
+                              },
+                              "gap": 10,
+                              "padding": [
+                                8,
+                                10
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "vgYYe",
+                                  "name": "reader-prev",
+                                  "fill": "#333333",
+                                  "content": "Prev",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "xMx3s",
+                                  "name": "reader-page-info",
+                                  "fill": "#666666",
+                                  "content": "Page 1 / 120 · 1%",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "vp7Pa",
+                                  "name": "reader-next",
+                                  "fill": "#333333",
+                                  "content": "Next",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
                             {
                               "type": "text",
                               "id": "woGx9",
@@ -4993,7 +5041,7 @@
                               "id": "YdXtD",
                               "name": "reader-text-box",
                               "width": "fill_container",
-                              "height": "fill_container",
+                              "height": 170,
                               "fill": "#FFFFFF",
                               "cornerRadius": 6,
                               "stroke": {
@@ -5011,11 +5059,30 @@
                                   "fill": "#1A1A1A",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Sample reader source text.\n\nThis area contains dummy data.\n\n- Paragraph A\n- Paragraph B",
+                                  "content": "Sample reader source text.\n\nLong encoded noise tokens are filtered from EPUB source before rendering.\n\nPage navigation advances one exact page per click.",
                                   "lineHeight": 1.6,
                                   "fontFamily": "Inter",
                                   "fontSize": 14,
                                   "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "nYEvx",
+                              "name": "reader-progress",
+                              "width": "fill_container",
+                              "height": 5,
+                              "fill": "#E5E5E5",
+                              "cornerRadius": 999,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "RcjMD",
+                                  "name": "reader-progress-fill",
+                                  "width": 120,
+                                  "height": "fill_container",
+                                  "fill": "#111111"
                                 }
                               ]
                             }
