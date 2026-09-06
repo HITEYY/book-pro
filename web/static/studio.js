@@ -3,6 +3,7 @@ const STUDIO_I18N = {
     brand_sub: "다권 요약 허브",
     nav_library: "라이브러리",
     nav_settings: "설정",
+    nav_logout: "로그아웃",
     nav_panel: "Panel",
     studio_subtitle: "AI와 함께 챕터 단위로 책을 집필하는 전용 페이지입니다.",
     studio_projects_title: "Projects",
@@ -95,6 +96,7 @@ const STUDIO_I18N = {
     brand_sub: "Multi-book Summary Hub",
     nav_library: "Library",
     nav_settings: "Settings",
+    nav_logout: "Logout",
     nav_panel: "Panel",
     studio_subtitle: "Write a book chapter by chapter with the AI co-writer.",
     studio_projects_title: "Projects",
@@ -187,6 +189,7 @@ const STUDIO_I18N = {
     brand_sub: "マルチブック要約ハブ",
     nav_library: "ライブラリ",
     nav_settings: "設定",
+    nav_logout: "ログアウト",
     nav_panel: "Panel",
     studio_subtitle: "AIと一緒に章単位で本を執筆するページです。",
     studio_projects_title: "Projects",
@@ -1293,6 +1296,8 @@ function bindEvents() {
 }
 
 async function init() {
+  await loadServerSettings();
+  state.settings = readSharedSettings();
   setUiLanguage(state.settings.uiLanguage || "ko");
   applyI18nToDom();
   bindEvents();

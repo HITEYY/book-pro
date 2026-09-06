@@ -97,7 +97,8 @@ def test_request_json_sends_browser_like_user_agent(monkeypatch: pytest.MonkeyPa
     assert request.get_header("X-api-key") == "k"  # type: ignore[attr-defined]
 
 
-def test_provider_models_endpoint_returns_zen_models(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_models_endpoint_returns_zen_models(monkeypatch: pytest.MonkeyPatch, make_admin) -> None:
+    make_admin(client)
     monkeypatch.setattr(
         provider_models,
         "_request_json",
@@ -112,7 +113,8 @@ def test_provider_models_endpoint_returns_zen_models(monkeypatch: pytest.MonkeyP
     assert payload["models"] == ["grok-4.6"]
 
 
-def test_provider_models_endpoint_rejects_unknown_provider() -> None:
+def test_provider_models_endpoint_rejects_unknown_provider(make_admin) -> None:
+    make_admin(client)
     response = client.post("/providers/models", data={"provider": "not-a-provider"})
     assert response.status_code == 400
 

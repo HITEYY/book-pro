@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     mcp_path: str = Field(default="/mcp", alias="BOOK_PRO_MCP_PATH")
     mcp_token: str = Field(default="", alias="BOOK_PRO_MCP_TOKEN")
     mcp_import_dir: str = Field(default="", alias="BOOK_PRO_MCP_IMPORT_DIR")
+    session_secret_key: str = Field(default="", alias="BOOK_PRO_SESSION_SECRET")
+    session_cookie_secure: bool = Field(default=False, alias="BOOK_PRO_SESSION_COOKIE_SECURE")
+    admin_bootstrap_username: str = Field(default="admin", alias="BOOK_PRO_ADMIN_USERNAME")
+    admin_bootstrap_password: str = Field(default="", alias="BOOK_PRO_ADMIN_PASSWORD")
 
     model_config = SettingsConfigDict(
         env_file=".env",

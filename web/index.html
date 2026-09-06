@@ -24,6 +24,7 @@
           <button class="nav-item active" id="nav-library" type="button" data-i18n="nav_library">Library</button>
           <a class="nav-item" id="nav-studio" href="/studio">Studio</a>
           <button class="nav-item" id="nav-settings" type="button" data-i18n="nav_settings">Settings</button>
+          <button class="nav-item" id="nav-logout" type="button" data-i18n="nav_logout">Logout</button>
         </nav>
       </aside>
 
@@ -286,6 +287,34 @@
               </label>
             </div>
             <p class="settings-hint" id="settings-active-summary"></p>
+          </section>
+
+          <section class="panel hidden" id="admin-users-panel">
+            <div class="panel-head">
+              <h2 class="panel-title" data-i18n="admin_users_title">Accounts (Admin)</h2>
+            </div>
+            <ul class="admin-user-list" id="admin-user-list"></ul>
+            <div class="settings-grid" id="admin-user-form">
+              <label class="field">
+                <span data-i18n="admin_new_username">Username</span>
+                <input id="admin-new-username" type="text" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span data-i18n="admin_new_display_name">Display Name</span>
+                <input id="admin-new-display-name" type="text" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span data-i18n="admin_new_password">Password</span>
+                <input id="admin-new-password" type="password" autocomplete="new-password" />
+              </label>
+              <label class="field field-switch" id="admin-new-is-admin-field">
+                <span data-i18n="admin_new_is_admin">Admin account</span>
+                <input id="admin-new-is-admin" type="checkbox" />
+              </label>
+            </div>
+            <div class="header-actions">
+              <button id="admin-create-user-btn" class="btn btn-primary" type="button" data-i18n="admin_create_user_btn">Create Account</button>
+            </div>
           </section>
         </section>
       </main>

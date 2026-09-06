@@ -443,3 +443,38 @@ class ChatScriptResponse(BaseModel):
     chapter_count: int
     line_count: int
     chapters: List[ChatScriptChapter] = Field(default_factory=list)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    is_admin: bool
+
+
+class MeResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    is_admin: bool
+
+
+class AdminUserCreateRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+    is_admin: bool = False
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    is_admin: bool
+    disabled: bool
+    created_at: str

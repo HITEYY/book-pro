@@ -57,14 +57,18 @@ Main environment variables:
 - `BOOK_PRO_MCP_PATH`: MCP HTTP mount path (default `/mcp`)
 - `BOOK_PRO_MCP_TOKEN`: when set, the MCP HTTP endpoint requires `Authorization: Bearer <token>`
 - `BOOK_PRO_MCP_IMPORT_DIR`: when set, MCP agents may import EPUBs by path inside this directory
+- `BOOK_PRO_SESSION_SECRET`: secret used to sign login session cookies (a random one is generated per process if unset — set this explicitly in production so logins survive restarts)
+- `BOOK_PRO_ADMIN_USERNAME` / `BOOK_PRO_ADMIN_PASSWORD`: first-run only. If no user accounts exist yet, an admin account is created with these credentials and any pre-existing content under `BOOK_PRO_OUTPUT_DIR` is moved into that admin's own library. Further accounts are then created by an admin via `POST /admin/users` (self-registration is intentionally not available).
 
 Note: provider aliases like `open-ai` are normalized internally.
 
 ## 3) Run
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+BOOK_PRO_ADMIN_USERNAME=admin BOOK_PRO_ADMIN_PASSWORD=change-me uvicorn app.main:app --reload --port 8000
 ```
+
+The whole web UI now requires logging in at `/login`. On first run, log in with the `BOOK_PRO_ADMIN_USERNAME`/`BOOK_PRO_ADMIN_PASSWORD` above; that account is an admin and can create further accounts via `POST /admin/users`.
 
 ### Docker
 
@@ -159,12 +163,35 @@ Notes:
 ## 4) URLs
 
 - Swagger UI: <http://127.0.0.1:8000/docs>
+- Login: <http://127.0.0.1:8000/login>
 - Web Panel (Library/Reader): <http://127.0.0.1:8000/panel>
 - Studio (AI co-writing): <http://127.0.0.1:8000/studio>
 - MCP endpoint (AI agents): <http://127.0.0.1:8000/mcp>
 - Agent Skill Doc: <http://127.0.0.1:8000/skill.md>
 
 ## 5) API Usage
+
+### Accounts and login
+
+Every route except `/login`, `/auth/login`, `/health`, `/skill.md` and static assets requires a logged-in session cookie. Log in first, then reuse the cookie jar for other requests:
+
+```bash
+curl -c cookies.txt -X POST "http://127.0.0.1:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "change-me"}'
+
+curl -b cookies.txt "http://127.0.0.1:8000/books"
+```
+
+An admin account can create further accounts (self-registration is intentionally unavailable):
+
+```bash
+curl -b cookies.txt -X POST "http://127.0.0.1:8000/admin/users" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "alice-password", "is_admin": false}'
+```
+
+Each account's books, Studio projects and settings (including per-provider API keys) are private to that account.
 
 ### Summarize a single EPUB
 
@@ -604,54 +631,59 @@ BOOK_PRO_QWEN_TTS_API_KEY=none
 
 ## 9) Output Directory Layout
 
-After successful processing, files are stored like:
+Each user's content lives under its own `users/<user_id>/` subdirectory of `BOOK_PRO_OUTPUT_DIR`, alongside a `_users/` directory holding account records (`users.json`) — neither is visible to other users. Below that per-user root, files are stored like:
 
 ```text
 books/
-  book-<title>/
-    <uploaded-book>.epub
-    studio.json                  (Studio projects only)
-    .chapter-digests.json
-    .reader-progress.json
-    chapter/
-      c-<index>-<chapter-title>.md
-    character/
-      <character-name>.md
-    setting.md
-    studio/
-      conversation.json          (Studio projects only)
-      bible.json                 (Studio projects only)
-      bible-conversation.json
-      pending-actions.json       (approval-mode agent actions)
-    .studio-history/             (agentic file snapshots + index.json)
-    export/
-      <slug>.md / <slug>.epub    (Studio export output)
-    chat/
-      script.json
-    audiobook/
-      script.json
-      chapter-scripts/
-        c-*.json
-      voices.json
-      voice-previews/
-        *.wav
-      segments/
-        c-*/
-          0001-*.wav
-      chapters/
-        c-*.wav
-      audiobook.wav
-  series-<title>/
-    series.json
-    setting.md
-    character/
-      <character-name>.md
-    studio/
-      bible.json
-      bible-conversation.json
-    export/
-      <slug>.md / <slug>.epub
-  .trash/                       (deleted Studio projects/series and files)
+  _users/
+    users.json                    (accounts: username, password hash, per-user settings)
+    .migrated                     (first-run migration marker)
+  users/
+    <user_id>/
+      book-<title>/
+        <uploaded-book>.epub
+        studio.json                  (Studio projects only)
+        .chapter-digests.json
+        .reader-progress.json
+        chapter/
+          c-<index>-<chapter-title>.md
+        character/
+          <character-name>.md
+        setting.md
+        studio/
+          conversation.json          (Studio projects only)
+          bible.json                 (Studio projects only)
+          bible-conversation.json
+          pending-actions.json       (approval-mode agent actions)
+        .studio-history/             (agentic file snapshots + index.json)
+        export/
+          <slug>.md / <slug>.epub    (Studio export output)
+        chat/
+          script.json
+        audiobook/
+          script.json
+          chapter-scripts/
+            c-*.json
+          voices.json
+          voice-previews/
+            *.wav
+          segments/
+            c-*/
+              0001-*.wav
+          chapters/
+            c-*.wav
+          audiobook.wav
+      series-<title>/
+        series.json
+        setting.md
+        character/
+          <character-name>.md
+        studio/
+          bible.json
+          bible-conversation.json
+        export/
+          <slug>.md / <slug>.epub
+      .trash/                       (deleted Studio projects/series and files)
 ```
 
 ## Notes

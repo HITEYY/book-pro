@@ -3,18 +3,29 @@ import asyncio
 import json
 import os
 import tempfile
+from contextlib import asynccontextmanager
 from typing import Any
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.concurrency import run_in_threadpool
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from app import service
 from app.audiobook import AudiobookGenerator
+from app.auth import (
+    AuthGateMiddleware,
+    get_current_root_dir,
+    get_current_user,
+    require_admin,
+    resolve_session_secret,
+)
+from app.bootstrap import bootstrap_and_migrate
 from app.config import get_settings
+from app import user_storage
 from app.epub_parser import parse_epub
 from app.mcp_server import MountPathRewriteMiddleware, build_mcp_app, mcp_mount_path
 from app.progress import (
@@ -25,6 +36,8 @@ from app.progress import (
     update_upload_progress,
 )
 from app.schemas import (
+    AdminUserCreateRequest,
+    AdminUserResponse,
     BookDetailResponse,
     AudioScriptLine,
     AudiobookCreateRequest,
@@ -41,6 +54,9 @@ from app.schemas import (
     ChatScriptChapter,
     ChatScriptCreateRequest,
     ChatScriptResponse,
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
     MultiSummarizeError,
     MultiSummarizeResponse,
     ProviderModelsResponse,
@@ -101,11 +117,27 @@ _summarize_from_temp_path = service.summarize_from_temp_path
 
 _mcp_app = build_mcp_app()
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    settings = get_settings()
+    bootstrap_and_migrate(
+        settings.output_dir,
+        admin_username=settings.admin_bootstrap_username,
+        admin_password=settings.admin_bootstrap_password,
+    )
+    if _mcp_app is not None:
+        async with _mcp_app.lifespan(app):
+            yield
+    else:
+        yield
+
+
 app = FastAPI(
     title="book-pro",
     description="EPUB 소설/서사의 챕터/캐릭터/세계관 요약 생성 API",
     version="0.3.0",
-    lifespan=_mcp_app.lifespan if _mcp_app is not None else None,
+    lifespan=_lifespan,
 )
 
 if (WEB_DIR / "static").exists():
@@ -122,10 +154,111 @@ if _mcp_app is not None:
     app.add_middleware(MountPathRewriteMiddleware, path=mcp_mount_path())
     app.mount(mcp_mount_path(), _mcp_app)
 
+# Middleware order: added-last-runs-first (Starlette wraps in reverse of add order).
+# AuthGateMiddleware is added first (ends up INNER, needs request.session already populated),
+# SessionMiddleware is added second (ends up OUTER, runs first and populates request.session).
+app.add_middleware(AuthGateMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=resolve_session_secret(get_settings().session_secret_key),
+    session_cookie="book_pro_session",
+    https_only=get_settings().session_cookie_secure,
+    max_age=14 * 24 * 60 * 60,
+)
+
 
 @app.get("/")
 def root() -> RedirectResponse:
     return RedirectResponse(url="/panel")
+
+
+@app.get("/login")
+def login_page() -> FileResponse:
+    login_path = WEB_DIR / "login.html"
+    if not login_path.exists():
+        raise HTTPException(status_code=404, detail="로그인 페이지 파일이 없습니다.")
+    return FileResponse(str(login_path), headers={"Cache-Control": "no-cache"})
+
+
+@app.post("/auth/login", response_model=LoginResponse)
+def login(payload: LoginRequest, request: Request) -> LoginResponse:
+    settings = get_settings()
+    user = user_storage.get_user_by_username(settings.output_dir, username=payload.username)
+    if (
+        user is None
+        or user.get("disabled")
+        or not user_storage.verify_password(
+            payload.password,
+            password_hash=user["password_hash"],
+            salt=user["password_salt"],
+            iterations=user.get("password_iterations", 600_000),
+        )
+    ):
+        raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
+
+    request.session.clear()
+    request.session["user_id"] = user["id"]
+    return LoginResponse(
+        id=user["id"],
+        username=user["username"],
+        display_name=user["display_name"],
+        is_admin=user["is_admin"],
+    )
+
+
+@app.post("/auth/logout")
+def logout(request: Request) -> dict[str, str]:
+    request.session.clear()
+    return {"status": "ok"}
+
+
+@app.get("/auth/me", response_model=MeResponse)
+def me(user: dict[str, Any] = Depends(get_current_user)) -> MeResponse:
+    return MeResponse(
+        id=user["id"],
+        username=user["username"],
+        display_name=user["display_name"],
+        is_admin=user["is_admin"],
+    )
+
+
+@app.get("/auth/me/settings")
+def get_my_settings(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    return user.get("settings", {})
+
+
+@app.put("/auth/me/settings")
+def put_my_settings(
+    payload: dict[str, Any],
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    settings = get_settings()
+    return user_storage.update_user_settings(settings.output_dir, user_id=user["id"], settings_patch=payload)
+
+
+@app.post("/admin/users", response_model=AdminUserResponse)
+def admin_create_user(
+    payload: AdminUserCreateRequest,
+    _: dict[str, Any] = Depends(require_admin),
+) -> AdminUserResponse:
+    settings = get_settings()
+    try:
+        user = user_storage.create_user(
+            settings.output_dir,
+            username=payload.username,
+            password=payload.password,
+            display_name=payload.display_name,
+            is_admin=payload.is_admin,
+        )
+    except (user_storage.InvalidUsernameError, user_storage.UsernameTakenError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminUserResponse.model_validate(user)
+
+
+@app.get("/admin/users", response_model=list[AdminUserResponse])
+def admin_list_users(_: dict[str, Any] = Depends(require_admin)) -> list[AdminUserResponse]:
+    settings = get_settings()
+    return [AdminUserResponse.model_validate(user) for user in user_storage.list_users(settings.output_dir)]
 
 
 @app.get("/panel")
@@ -295,7 +428,7 @@ async def summarize_from_epub(
             chapter_parallel=resolved_chapter_parallel,
             language=language,
             precise_analysis=precise_analysis,
-            output_dir=settings.output_dir,
+            output_dir=get_current_root_dir(),
             upload_id=upload_id,
         )
         logger.info(
@@ -320,8 +453,6 @@ async def summarize_from_epub(
 async def upload_epub_only(
     file: UploadFile = File(..., description="저장할 EPUB 파일"),
 ) -> BookUploadResponse:
-    settings = get_settings()
-
     if not file.filename:
         raise HTTPException(status_code=400, detail="파일 이름이 없습니다.")
     if not file.filename.lower().endswith(".epub"):
@@ -341,9 +472,9 @@ async def upload_epub_only(
             book.title,
             source_file_path=temp_path,
             original_filename=file.filename,
-            root_dir=settings.output_dir,
+            root_dir=get_current_root_dir(),
         )
-        book_dir = ensure_book_directories(book.title, root_dir=settings.output_dir)
+        book_dir = ensure_book_directories(book.title, root_dir=get_current_root_dir())
         logger.info(
             "[요청 완료] /books/upload-epub title='%s' slug='%s' path='%s'",
             book.title,
@@ -390,7 +521,7 @@ async def summarize_existing_book(
     resolved_chapter_parallel = _resolve_chapter_parallel(chapter_parallel, settings.chapter_parallel)
 
     try:
-        epub_path = get_latest_epub_path(settings.output_dir, slug=book_slug)
+        epub_path = get_latest_epub_path(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -432,7 +563,7 @@ async def summarize_existing_book(
             resolved_chapter_parallel,
             language,
             precise_analysis,
-            settings.output_dir,
+            get_current_root_dir(),
             upload_key,
         )
         logger.info(
@@ -521,7 +652,7 @@ async def summarize_from_epubs(
                     chapter_parallel=resolved_chapter_parallel,
                     language=language,
                     precise_analysis=precise_analysis,
-                    output_dir=settings.output_dir,
+                    output_dir=get_current_root_dir(),
                 )
                 logger.info(
                     "[배치 진행 %d/%d] file='%s' 처리 완료 title='%s'",
@@ -574,17 +705,14 @@ def get_books(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=50),
 ) -> BookListResponse:
-    settings = get_settings()
-    payload = list_books(settings.output_dir, page=page, page_size=page_size)
+    payload = list_books(get_current_root_dir(), page=page, page_size=page_size)
     return BookListResponse.model_validate(payload)
 
 
 @app.get("/books/{book_slug}", response_model=BookDetailResponse)
 def get_book_detail(book_slug: str) -> BookDetailResponse:
-    settings = get_settings()
-
     try:
-        payload = read_book_detail(settings.output_dir, slug=book_slug)
+        payload = read_book_detail(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -595,10 +723,8 @@ def get_book_detail(book_slug: str) -> BookDetailResponse:
 
 @app.get("/books/{book_slug}/reader", response_model=BookReaderResponse)
 def get_book_reader(book_slug: str) -> BookReaderResponse:
-    settings = get_settings()
-
     try:
-        payload = read_book_reader(settings.output_dir, slug=book_slug)
+        payload = read_book_reader(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -609,10 +735,8 @@ def get_book_reader(book_slug: str) -> BookReaderResponse:
 
 @app.get("/books/{book_slug}/reader/progress", response_model=BookReaderProgressResponse)
 def get_book_reader_progress(book_slug: str) -> BookReaderProgressResponse:
-    settings = get_settings()
-
     try:
-        payload = read_book_reader_progress(settings.output_dir, slug=book_slug)
+        payload = read_book_reader_progress(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -626,11 +750,9 @@ def put_book_reader_progress(
     book_slug: str,
     payload: BookReaderProgressRequest,
 ) -> BookReaderProgressResponse:
-    settings = get_settings()
-
     try:
         saved = save_book_reader_progress(
-            settings.output_dir,
+            get_current_root_dir(),
             slug=book_slug,
             page=payload.page,
             total_pages=payload.total_pages,
@@ -676,7 +798,6 @@ def list_active_upload_progress() -> list[UploadProgressResponse]:
 
 @app.post("/books/{book_slug}/ask", response_model=BookAskResponse)
 def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
-    settings = get_settings()
     question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="질문을 입력해 주세요.")
@@ -690,7 +811,7 @@ def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
         raise HTTPException(status_code=400, detail="character 모드에서는 character_name이 필요합니다.")
 
     try:
-        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+        snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -731,7 +852,6 @@ def ask_about_book(book_slug: str, payload: BookAskRequest) -> BookAskResponse:
 
 @app.post("/books/{book_slug}/ask/stream")
 def ask_about_book_stream(book_slug: str, payload: BookAskRequest) -> StreamingResponse:
-    settings = get_settings()
     question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="질문을 입력해 주세요.")
@@ -745,7 +865,7 @@ def ask_about_book_stream(book_slug: str, payload: BookAskRequest) -> StreamingR
         raise HTTPException(status_code=400, detail="character 모드에서는 character_name이 필요합니다.")
 
     try:
-        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+        snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -1244,7 +1364,7 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
     settings = get_settings()
 
     try:
-        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+        snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -1283,7 +1403,7 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
             target_minutes=payload.target_minutes,
         )
 
-        output_dir = Path(settings.output_dir) / book_slug / "audiobook"
+        output_dir = Path(get_current_root_dir()) / book_slug / "audiobook"
         synthesis = generator.synthesize(
             script_bundle=script_bundle,
             out_dir=output_dir,
@@ -1323,10 +1443,8 @@ def create_audiobook(book_slug: str, payload: AudiobookCreateRequest) -> Audiobo
 
 @app.post("/books/{book_slug}/chat-script", response_model=ChatScriptResponse)
 def create_chat_script(book_slug: str, payload: ChatScriptCreateRequest) -> ChatScriptResponse:
-    settings = get_settings()
-
     try:
-        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+        snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -1350,7 +1468,7 @@ def create_chat_script(book_slug: str, payload: ChatScriptCreateRequest) -> Chat
             target_minutes=payload.target_minutes,
         )
 
-        output_dir = Path(settings.output_dir) / book_slug / "chat"
+        output_dir = Path(get_current_root_dir()) / book_slug / "chat"
         output_dir.mkdir(parents=True, exist_ok=True)
         script_path = output_dir / "script.json"
         script_path.write_text(script_bundle.model_dump_json(indent=2), encoding="utf-8")
@@ -1379,16 +1497,14 @@ def create_chat_script(book_slug: str, payload: ChatScriptCreateRequest) -> Chat
 
 @app.get("/books/{book_slug}/chat-script", response_model=ChatScriptResponse)
 def get_chat_script(book_slug: str) -> ChatScriptResponse:
-    settings = get_settings()
-
     try:
-        snapshot = read_book_summary_snapshot(settings.output_dir, slug=book_slug)
+        snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=book_slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    script_path = Path(settings.output_dir) / book_slug / "chat" / "script.json"
+    script_path = Path(get_current_root_dir()) / book_slug / "chat" / "script.json"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="채팅형 대본이 아직 생성되지 않았습니다.")
 

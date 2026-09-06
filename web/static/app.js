@@ -10,6 +10,20 @@ registerI18nMessages({
     nav_library: "라이브러리",
     nav_detail: "책 상세",
     nav_settings: "설정",
+    nav_logout: "로그아웃",
+    admin_users_title: "계정 (관리자)",
+    admin_new_username: "아이디",
+    admin_new_display_name: "표시 이름",
+    admin_new_password: "비밀번호",
+    admin_new_is_admin: "관리자 계정",
+    admin_create_user_btn: "계정 생성",
+    admin_badge_admin: "관리자",
+    admin_badge_member: "일반",
+    admin_badge_disabled: "비활성화됨",
+    admin_users_load_failed: "계정 목록을 불러오지 못했습니다.",
+    admin_new_user_required: "아이디와 비밀번호를 입력해 주세요.",
+    admin_new_user_created: "계정이 생성되었습니다.",
+    admin_new_user_failed: "계정 생성에 실패했습니다.",
     library_title: "Books Library",
     detail_title_default: "Book Detail",
     settings_title: "Settings",
@@ -154,6 +168,20 @@ registerI18nMessages({
     nav_library: "Library",
     nav_detail: "Book Detail",
     nav_settings: "Settings",
+    nav_logout: "Logout",
+    admin_users_title: "Accounts (Admin)",
+    admin_new_username: "Username",
+    admin_new_display_name: "Display Name",
+    admin_new_password: "Password",
+    admin_new_is_admin: "Admin account",
+    admin_create_user_btn: "Create Account",
+    admin_badge_admin: "Admin",
+    admin_badge_member: "Member",
+    admin_badge_disabled: "Disabled",
+    admin_users_load_failed: "Failed to load accounts.",
+    admin_new_user_required: "Please enter a username and password.",
+    admin_new_user_created: "Account created.",
+    admin_new_user_failed: "Failed to create account.",
     library_title: "Books Library",
     detail_title_default: "Book Detail",
     settings_title: "Settings",
@@ -298,6 +326,20 @@ registerI18nMessages({
     nav_library: "ライブラリ",
     nav_detail: "本の詳細",
     nav_settings: "設定",
+    nav_logout: "ログアウト",
+    admin_users_title: "アカウント (管理者)",
+    admin_new_username: "ユーザー名",
+    admin_new_display_name: "表示名",
+    admin_new_password: "パスワード",
+    admin_new_is_admin: "管理者アカウント",
+    admin_create_user_btn: "アカウント作成",
+    admin_badge_admin: "管理者",
+    admin_badge_member: "メンバー",
+    admin_badge_disabled: "無効",
+    admin_users_load_failed: "アカウント一覧の読み込みに失敗しました。",
+    admin_new_user_required: "ユーザー名とパスワードを入力してください。",
+    admin_new_user_created: "アカウントを作成しました。",
+    admin_new_user_failed: "アカウントの作成に失敗しました。",
     library_title: "Books Library",
     detail_title_default: "Book Detail",
     settings_title: "Settings",
@@ -505,6 +547,14 @@ const el = {
   apiKeyOpencodeZen: document.getElementById("api-key-opencode-zen"),
   settingsSaveBtn: document.getElementById("settings-save-btn"),
   settingsActiveSummary: document.getElementById("settings-active-summary"),
+
+  adminUsersPanel: document.getElementById("admin-users-panel"),
+  adminUserList: document.getElementById("admin-user-list"),
+  adminNewUsername: document.getElementById("admin-new-username"),
+  adminNewDisplayName: document.getElementById("admin-new-display-name"),
+  adminNewPassword: document.getElementById("admin-new-password"),
+  adminNewIsAdmin: document.getElementById("admin-new-is-admin"),
+  adminCreateUserBtn: document.getElementById("admin-create-user-btn"),
 
   uploadBooksBtn: document.getElementById("upload-books-btn"),
   uploadSingleBtn: document.getElementById("upload-single-btn"),
@@ -2467,6 +2517,65 @@ function bindSettingsEvents() {
     await fetchProviderModels(state.settings.selectedProvider, { force: true, silent: true });
     showToast(t("settings_saved"));
   });
+
+  el.adminCreateUserBtn?.addEventListener("click", createAdminUser);
+}
+
+async function initAdminUsersPanel() {
+  if (!el.adminUsersPanel) return;
+  try {
+    const me = await fetchJson("/auth/me");
+    if (!me.is_admin) return;
+    el.adminUsersPanel.classList.remove("hidden");
+    await refreshAdminUserList();
+  } catch (_error) {
+    // not logged in yet or request failed silently: keep the panel hidden
+  }
+}
+
+async function refreshAdminUserList() {
+  if (!el.adminUserList) return;
+  try {
+    const users = await fetchJson("/admin/users");
+    el.adminUserList.innerHTML = users
+      .map((user) => {
+        const badgeClass = user.is_admin ? "admin-user-badge is-admin" : "admin-user-badge";
+        const badgeText = user.is_admin ? t("admin_badge_admin") : t("admin_badge_member");
+        const disabledText = user.disabled ? ` · ${t("admin_badge_disabled")}` : "";
+        return `<li><span>${escapeHtml(user.display_name || user.username)} (${escapeHtml(user.username)})</span><span class="${badgeClass}">${badgeText}${disabledText}</span></li>`;
+      })
+      .join("");
+  } catch (error) {
+    showToast(error.message || t("admin_users_load_failed"), true);
+  }
+}
+
+async function createAdminUser() {
+  const username = (el.adminNewUsername?.value || "").trim();
+  const password = el.adminNewPassword?.value || "";
+  const displayName = (el.adminNewDisplayName?.value || "").trim();
+  const isAdmin = Boolean(el.adminNewIsAdmin?.checked);
+
+  if (!username || !password) {
+    showToast(t("admin_new_user_required"), true);
+    return;
+  }
+
+  try {
+    await fetchJson("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, display_name: displayName, is_admin: isAdmin }),
+    });
+    if (el.adminNewUsername) el.adminNewUsername.value = "";
+    if (el.adminNewDisplayName) el.adminNewDisplayName.value = "";
+    if (el.adminNewPassword) el.adminNewPassword.value = "";
+    if (el.adminNewIsAdmin) el.adminNewIsAdmin.checked = false;
+    showToast(t("admin_new_user_created"));
+    await refreshAdminUserList();
+  } catch (error) {
+    showToast(error.message || t("admin_new_user_failed"), true);
+  }
 }
 
 function bindEvents() {
@@ -2544,9 +2653,11 @@ function bindEvents() {
 
 async function init() {
   initializeModelOptionState();
+  await loadServerSettings();
   loadSettingsFromStorage();
   loadReaderProgressFromStorage();
   bindEvents();
+  await initAdminUsersPanel();
 
   const initialView = new URLSearchParams(window.location.search).get("view");
   if (initialView === "settings" || initialView === "library") {

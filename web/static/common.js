@@ -164,8 +164,49 @@ function readSharedSettings() {
 function writeSharedSettings(patch) {
   const merged = { ...readSharedSettings(), ...(patch || {}) };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  fetch("/auth/me/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(merged),
+  }).catch(() => {});
   return merged;
 }
+
+async function loadServerSettings() {
+  try {
+    const response = await fetch("/auth/me/settings");
+    if (!response.ok) return;
+    const serverSettings = await response.json();
+    if (serverSettings && Object.keys(serverSettings).length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...readSharedSettings(), ...serverSettings }));
+    }
+  } catch (_error) {
+    // offline/unreachable: keep using whatever is already in localStorage
+  }
+}
+
+(() => {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(...args) {
+    const response = await nativeFetch(...args);
+    if (response.status === 401 && !window.location.pathname.startsWith("/login")) {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    }
+    return response;
+  };
+})();
+
+document.addEventListener("DOMContentLoaded", () => {
+  const logoutBtn = document.getElementById("nav-logout");
+  if (!logoutBtn) return;
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await fetch("/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/login";
+    }
+  });
+});
 
 function getRunConfigFrom(settings) {
   const provider = settings.selectedProvider;

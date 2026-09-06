@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from fastapi.concurrency import run_in_threadpool
 
+from app.auth import get_current_root_dir
 from app.config import Settings, get_settings
 from app.epub_parser import parse_epub
 from app.progress import (
@@ -253,7 +254,6 @@ def read_epub_source(
 
 
 def import_epub(payload: bytes, file_name: str) -> dict[str, Any]:
-    settings = get_settings()
     name = (file_name or "").strip() or "upload.epub"
     temp_path = _write_temp_epub(payload)
     try:
@@ -262,9 +262,9 @@ def import_epub(payload: bytes, file_name: str) -> dict[str, Any]:
             book.title,
             source_file_path=temp_path,
             original_filename=name,
-            root_dir=settings.output_dir,
+            root_dir=get_current_root_dir(),
         )
-        book_dir = ensure_book_directories(book.title, root_dir=settings.output_dir)
+        book_dir = ensure_book_directories(book.title, root_dir=get_current_root_dir())
     finally:
         os.remove(temp_path)
 
@@ -309,7 +309,7 @@ async def run_summary_job(
             temp_path = _write_temp_epub(payload)
             source_path, source_name = temp_path, file_name
         elif book_slug:
-            epub_path = get_latest_epub_path(settings.output_dir, slug=book_slug)
+            epub_path = get_latest_epub_path(get_current_root_dir(), slug=book_slug)
             source_path, source_name = str(epub_path), epub_path.name
         else:
             raise ValueError("요약할 EPUB 파일 정보가 없습니다.")
@@ -323,7 +323,7 @@ async def run_summary_job(
             parallel,
             (language or "ko").strip() or "ko",
             precise_analysis,
-            settings.output_dir,
+            get_current_root_dir(),
             upload_id,
         )
         update_upload_progress(upload_id, book_title=summary.book_title)
@@ -377,10 +377,9 @@ def start_summary_job(
 
 
 def list_library(*, page: int = 1, page_size: int = 20, only_studio: bool = False) -> dict[str, Any]:
-    settings = get_settings()
     safe_page = max(1, int(page))
     safe_page_size = max(1, min(int(page_size), 50))
-    payload = list_books(settings.output_dir, page=safe_page, page_size=safe_page_size)
+    payload = list_books(get_current_root_dir(), page=safe_page, page_size=safe_page_size)
     items = list(payload["items"])
     if only_studio:
         items = [item for item in items if item.get("is_studio")]
@@ -393,8 +392,7 @@ def list_library(*, page: int = 1, page_size: int = 20, only_studio: bool = Fals
 
 
 def get_book_overview(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": detail["slug"],
         "book_title": detail["book_title"],
@@ -422,8 +420,7 @@ def get_book_overview(slug: str) -> dict[str, Any]:
 
 
 def list_chapters(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "book_title": detail["book_title"],
@@ -441,8 +438,7 @@ def list_chapters(slug: str) -> dict[str, Any]:
 
 
 def read_chapter_summary(slug: str, chapter_index: int) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     for chapter in detail["chapters"]:
         if chapter["index"] == chapter_index:
             return {
@@ -457,8 +453,7 @@ def read_chapter_summary(slug: str, chapter_index: int) -> dict[str, Any]:
 
 
 def list_characters(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "book_title": detail["book_title"],
@@ -475,8 +470,7 @@ def list_characters(slug: str) -> dict[str, Any]:
 
 
 def read_character(slug: str, name: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     needle = (name or "").strip().lower()
     for character in detail["characters"]:
         if character["name"].lower() == needle:
@@ -491,8 +485,7 @@ def read_character(slug: str, name: str) -> dict[str, Any]:
 
 
 def read_world_setting(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "book_title": detail["book_title"],
@@ -507,8 +500,7 @@ def read_original_chapter(
     offset: int = 0,
     max_chars: int = DEFAULT_ORIGINAL_CHARS,
 ) -> dict[str, Any]:
-    settings = get_settings()
-    reader = read_book_reader(settings.output_dir, slug=slug)
+    reader = read_book_reader(get_current_root_dir(), slug=slug)
     for chapter in reader["chapters"]:
         if chapter["index"] == chapter_index:
             limit = max(500, min(int(max_chars), MAX_ORIGINAL_CHARS))
@@ -537,7 +529,6 @@ def search_book(
     max_results: int = 20,
     context_chars: int = 160,
 ) -> dict[str, Any]:
-    settings = get_settings()
     needle = (query or "").strip()
     if not needle:
         raise ValueError("검색어를 입력해 주세요.")
@@ -547,7 +538,7 @@ def search_book(
         raise ValueError("scope는 all, summary, original만 가능합니다.")
 
     limit = max(1, min(int(max_results), 100))
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     matches: list[dict[str, Any]] = []
 
     def collect(source: str, chapter_index: int | None, label: str, text: str) -> None:
@@ -576,7 +567,7 @@ def search_book(
 
     if resolved_scope in {"all", "original"}:
         try:
-            reader = read_book_reader(settings.output_dir, slug=slug)
+            reader = read_book_reader(get_current_root_dir(), slug=slug)
         except FileNotFoundError:
             reader = None
         if reader:
@@ -616,8 +607,7 @@ def ask_book(
     if resolved_mode == "character" and not resolved_character:
         raise ValueError("character 모드에서는 character_name이 필요합니다.")
 
-    settings = get_settings()
-    snapshot = read_book_summary_snapshot(settings.output_dir, slug=slug)
+    snapshot = read_book_summary_snapshot(get_current_root_dir(), slug=slug)
     summarizer = build_summarizer(provider=provider, api_key=api_key, model=model)
     answer = summarizer.answer_about_book(
         book_title=snapshot["book_title"],
@@ -638,8 +628,7 @@ def ask_book(
 
 
 def get_reading_progress(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    return read_book_reader_progress(settings.output_dir, slug=slug)
+    return read_book_reader_progress(get_current_root_dir(), slug=slug)
 
 
 def update_reading_progress(
@@ -649,9 +638,8 @@ def update_reading_progress(
     total_pages: int,
     ratio: float | None = None,
 ) -> dict[str, Any]:
-    settings = get_settings()
     return save_book_reader_progress(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         page=page,
         total_pages=total_pages,
@@ -666,7 +654,6 @@ def create_project(
     genre: str = "",
     language: str = "ko",
 ) -> dict[str, Any]:
-    settings = get_settings()
     clean_title = (title or "").strip()
     if not clean_title:
         raise ValueError("제목을 입력해 주세요.")
@@ -676,10 +663,10 @@ def create_project(
         premise=(premise or "").strip(),
         genre=(genre or "").strip(),
         language=(language or "ko").strip() or "ko",
-        root_dir=settings.output_dir,
+        root_dir=get_current_root_dir(),
     )
     slug = project_path.parent.name
-    project = read_studio_project(settings.output_dir, slug=slug)
+    project = read_studio_project(get_current_root_dir(), slug=slug)
     logger.info("[스튜디오 프로젝트 생성] slug='%s'", slug)
     return {"slug": slug, "chapter_count": 0, **project}
 
@@ -691,7 +678,6 @@ def create_series(
     genre: str = "",
     language: str = "ko",
 ) -> dict[str, Any]:
-    settings = get_settings()
     clean_title = (title or "").strip()
     if not clean_title:
         raise ValueError("제목을 입력해 주세요.")
@@ -701,43 +687,42 @@ def create_series(
         premise=(premise or "").strip(),
         genre=(genre or "").strip(),
         language=(language or "ko").strip() or "ko",
-        root_dir=settings.output_dir,
+        root_dir=get_current_root_dir(),
     )
     slug = series_path.parent.name
-    series = read_series(settings.output_dir, slug=slug)
+    series = read_series(get_current_root_dir(), slug=slug)
     logger.info("[스튜디오 시리즈 생성] slug='%s'", slug)
     return {"slug": slug, "volumes": [], **series}
 
 
 def add_series_volume(series_slug: str, title: str, *, volume_index: int) -> dict[str, Any]:
-    settings = get_settings()
     clean_title = (title or "").strip()
     if not clean_title:
         raise ValueError("권 제목을 입력해 주세요.")
 
-    series = read_series(settings.output_dir, slug=series_slug)
+    series = read_series(get_current_root_dir(), slug=series_slug)
     project_path = save_studio_project(
         clean_title,
         premise=series.get("premise", ""),
         genre=series.get("genre", ""),
         language=series.get("language", "ko"),
-        root_dir=settings.output_dir,
+        root_dir=get_current_root_dir(),
         book_format="long",
         series_slug=series_slug,
         volume_index=int(volume_index),
     )
     volume_slug = project_path.parent.name
 
-    bible = read_bible(settings.output_dir, slug=series_slug)
+    bible = read_bible(get_current_root_dir(), slug=series_slug)
     if bible["setting_markdown"] or bible["characters"]:
         save_bible(
-            settings.output_dir,
+            get_current_root_dir(),
             slug=volume_slug,
             setting_markdown=bible["setting_markdown"],
             characters=bible["characters"],
         )
 
-    project = read_studio_project(settings.output_dir, slug=volume_slug)
+    project = read_studio_project(get_current_root_dir(), slug=volume_slug)
     logger.info(
         "[스튜디오 권 추가] series='%s' volume='%s' index=%s",
         series_slug,
@@ -748,31 +733,27 @@ def add_series_volume(series_slug: str, title: str, *, volume_index: int) -> dic
 
 
 def list_studio_projects() -> list[dict[str, Any]]:
-    settings = get_settings()
-    records = list_studio_project_records(settings.output_dir)
+    records = list_studio_project_records(get_current_root_dir())
     return [item for item in records if not item.get("series_slug")]
 
 
 def list_studio_series() -> list[dict[str, Any]]:
-    settings = get_settings()
-    return list_series(settings.output_dir)
+    return list_series(get_current_root_dir())
 
 
 def get_series(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    series = read_series(settings.output_dir, slug=slug)
+    series = read_series(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
-        "volumes": list_series_volumes(settings.output_dir, series_slug=slug),
+        "volumes": list_series_volumes(get_current_root_dir(), series_slug=slug),
         **series,
     }
 
 
 def get_project(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    project = read_studio_project(settings.output_dir, slug=slug)
-    detail = read_book_detail(settings.output_dir, slug=slug)
-    messages = read_studio_conversation(settings.output_dir, slug=slug)
+    project = read_studio_project(get_current_root_dir(), slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
+    messages = read_studio_conversation(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "chapter_count": detail["chapter_count"],
@@ -783,7 +764,7 @@ def get_project(slug: str) -> dict[str, Any]:
 
 @dataclass
 class _StudioChatPrep:
-    settings: Settings
+    root_dir: str
     slug: str
     summarizer: MultiProviderBookSummarizer
     llm_messages: list[dict[str, str]]
@@ -801,14 +782,14 @@ def _prepare_studio_chat(
     model: str | None = None,
     language: str | None = None,
 ) -> _StudioChatPrep:
-    settings = get_settings()
+    root_dir = get_current_root_dir()
     clean_message = (message or "").strip()
     if not clean_message:
         raise ValueError("메시지를 입력해 주세요.")
 
-    project = read_studio_project(settings.output_dir, slug=slug)
-    detail = read_book_detail(settings.output_dir, slug=slug)
-    history = read_studio_conversation(settings.output_dir, slug=slug)
+    project = read_studio_project(root_dir, slug=slug)
+    detail = read_book_detail(root_dir, slug=slug)
+    history = read_studio_conversation(root_dir, slug=slug)
     summarizer = build_summarizer(provider=provider, api_key=api_key, model=model)
     resolved_language = (language or project.get("language") or "ko").strip() or "ko"
 
@@ -824,7 +805,7 @@ def _prepare_studio_chat(
     now = datetime.now(tz=timezone.utc).isoformat()
     user_turn = {"role": "user", "content": clean_message, "created_at": now}
     updated_history = history + [user_turn]
-    save_studio_conversation(settings.output_dir, slug=slug, messages=updated_history)
+    save_studio_conversation(root_dir, slug=slug, messages=updated_history)
 
     system_prompt = build_studio_system_prompt(
         book_title=project["book_title"],
@@ -837,7 +818,7 @@ def _prepare_studio_chat(
     llm_messages.extend({"role": turn["role"], "content": turn["content"]} for turn in updated_history)
 
     return _StudioChatPrep(
-        settings=settings,
+        root_dir=root_dir,
         slug=slug,
         summarizer=summarizer,
         llm_messages=llm_messages,
@@ -860,7 +841,7 @@ def _stream_studio_chat(prep: _StudioChatPrep) -> Iterator[str]:
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
     }
     save_studio_conversation(
-        prep.settings.output_dir,
+        prep.root_dir,
         slug=prep.slug,
         messages=prep.updated_history + [assistant_turn],
     )
@@ -919,7 +900,6 @@ def finalize_chapter(
     chapter_title: str,
     content: str,
 ) -> dict[str, Any]:
-    settings = get_settings()
     clean_title = (chapter_title or "").strip()
     if not clean_title:
         raise ValueError("챕터 제목을 입력해 주세요.")
@@ -927,9 +907,9 @@ def finalize_chapter(
     if not clean_content:
         raise ValueError("챕터 내용을 입력해 주세요.")
 
-    project = read_studio_project(settings.output_dir, slug=slug)
+    project = read_studio_project(get_current_root_dir(), slug=slug)
     chapter_index = int(chapter_index)
-    remove_chapter_files(project["book_title"], chapter_index, root_dir=settings.output_dir)
+    remove_chapter_files(project["book_title"], chapter_index, root_dir=get_current_root_dir())
     chapter = ChapterSummary(
         chapter_index=chapter_index,
         chapter_title=clean_title,
@@ -939,9 +919,9 @@ def finalize_chapter(
         character_traits=[],
     )
     chapter_path = save_chapter_summary(
-        project["book_title"], chapter, root_dir=settings.output_dir
+        project["book_title"], chapter, root_dir=get_current_root_dir()
     )
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "chapter_index": chapter_index,
@@ -952,25 +932,23 @@ def finalize_chapter(
 
 
 def _resolve_bible_container(slug: str, container_type: str | None) -> tuple[str, dict[str, Any]]:
-    settings = get_settings()
     resolved = (container_type or "auto").strip().lower() or "auto"
     if resolved not in {"book", "series", "auto"}:
         raise ValueError("container_type은 book, series 또는 auto만 가능합니다.")
 
     if resolved != "series":
         try:
-            return "book", read_studio_project(settings.output_dir, slug=slug)
+            return "book", read_studio_project(get_current_root_dir(), slug=slug)
         except FileNotFoundError:
             if resolved == "book":
                 raise
-    return "series", read_series(settings.output_dir, slug=slug)
+    return "series", read_series(get_current_root_dir(), slug=slug)
 
 
 def get_bible_state(slug: str, *, container_type: str = "auto") -> dict[str, Any]:
-    settings = get_settings()
     resolved_container, _meta = _resolve_bible_container(slug, container_type)
-    bible = read_bible(settings.output_dir, slug=slug)
-    messages = read_bible_conversation(settings.output_dir, slug=slug)
+    bible = read_bible(get_current_root_dir(), slug=slug)
+    messages = read_bible_conversation(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "container_type": resolved_container,
@@ -999,9 +977,8 @@ def save_bible_state(
     characters_markdown: str | None = None,
     characters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    settings = get_settings()
     resolved_container, _meta = _resolve_bible_container(slug, container_type)
-    current = read_bible(settings.output_dir, slug=slug)
+    current = read_bible(get_current_root_dir(), slug=slug)
     resolved_setting = current["setting_markdown"] if setting_markdown is None else setting_markdown
     if characters is not None:
         resolved_characters = [
@@ -1016,7 +993,7 @@ def save_bible_state(
     else:
         resolved_characters = current["characters"]
     save_bible(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         setting_markdown=resolved_setting,
         characters=resolved_characters,
@@ -1031,15 +1008,14 @@ def update_project(
     genre: str | None = None,
     language: str | None = None,
 ) -> dict[str, Any]:
-    settings = get_settings()
     data = update_studio_project(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         premise=premise,
         genre=genre,
         language=language,
     )
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     logger.info("[스튜디오 프로젝트 수정] slug='%s'", slug)
     return {"slug": slug, "chapter_count": detail["chapter_count"], **data}
 
@@ -1051,22 +1027,20 @@ def update_series(
     genre: str | None = None,
     language: str | None = None,
 ) -> dict[str, Any]:
-    settings = get_settings()
     data = update_series_meta(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         premise=premise,
         genre=genre,
         language=language,
     )
     logger.info("[스튜디오 시리즈 수정] slug='%s'", slug)
-    return {"slug": slug, "volumes": list_series_volumes(settings.output_dir, series_slug=slug), **data}
+    return {"slug": slug, "volumes": list_series_volumes(get_current_root_dir(), series_slug=slug), **data}
 
 
 def delete_project(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    read_studio_project(settings.output_dir, slug=slug)
-    trash_path = move_container_to_trash(settings.output_dir, slug=slug)
+    read_studio_project(get_current_root_dir(), slug=slug)
+    trash_path = move_container_to_trash(get_current_root_dir(), slug=slug)
     logger.info("[스튜디오 프로젝트 삭제] slug='%s' trash='%s'", slug, trash_path)
     return {
         "slug": slug,
@@ -1077,10 +1051,9 @@ def delete_project(slug: str) -> dict[str, Any]:
 
 
 def delete_series(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    read_series(settings.output_dir, slug=slug)
-    detached = detach_series_volumes(settings.output_dir, series_slug=slug)
-    trash_path = move_container_to_trash(settings.output_dir, slug=slug)
+    read_series(get_current_root_dir(), slug=slug)
+    detached = detach_series_volumes(get_current_root_dir(), series_slug=slug)
+    trash_path = move_container_to_trash(get_current_root_dir(), slug=slug)
     logger.info(
         "[스튜디오 시리즈 삭제] slug='%s' trash='%s' detached=%d",
         slug,
@@ -1096,14 +1069,13 @@ def delete_series(slug: str) -> dict[str, Any]:
 
 
 def delete_studio_container(slug: str, *, container_type: str = "auto") -> dict[str, Any]:
-    settings = get_settings()
     resolved = (container_type or "auto").strip().lower() or "auto"
     if resolved not in {"book", "series", "auto"}:
         raise ValueError("container_type은 book, series 또는 auto만 가능합니다.")
 
     if resolved != "series":
         try:
-            read_studio_project(settings.output_dir, slug=slug)
+            read_studio_project(get_current_root_dir(), slug=slug)
             return delete_project(slug)
         except FileNotFoundError:
             if resolved == "book":
@@ -1112,8 +1084,7 @@ def delete_studio_container(slug: str, *, container_type: str = "auto") -> dict[
 
 
 def list_project_chapters(slug: str) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     return {
         "slug": slug,
         "chapter_count": detail["chapter_count"],
@@ -1122,8 +1093,7 @@ def list_project_chapters(slug: str) -> dict[str, Any]:
 
 
 def get_project_chapter(slug: str, chapter_index: int) -> dict[str, Any]:
-    settings = get_settings()
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     for chapter in detail["chapters"]:
         if chapter["index"] == int(chapter_index):
             return {"slug": slug, **chapter}
@@ -1131,14 +1101,13 @@ def get_project_chapter(slug: str, chapter_index: int) -> dict[str, Any]:
 
 
 def delete_project_chapter(slug: str, chapter_index: int) -> dict[str, Any]:
-    settings = get_settings()
-    read_studio_project(settings.output_dir, slug=slug)
+    read_studio_project(get_current_root_dir(), slug=slug)
     removed = delete_chapter_files_by_index(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         chapter_index=chapter_index,
     )
-    detail = read_book_detail(settings.output_dir, slug=slug)
+    detail = read_book_detail(get_current_root_dir(), slug=slug)
     logger.info(
         "[스튜디오 챕터 삭제] slug='%s' index=%s files=%d",
         slug,
@@ -1159,14 +1128,13 @@ def export_studio_book(
     export_format: str = "markdown",
     include_bible: bool = False,
 ) -> dict[str, Any]:
-    settings = get_settings()
     fmt = (export_format or "markdown").strip().lower()
     if fmt not in {"markdown", "epub"}:
         raise ValueError("export_format은 markdown 또는 epub만 가능합니다.")
 
     resolved, _meta = _resolve_export_container(slug)
     path = export_studio_container(
-        settings.output_dir,
+        get_current_root_dir(),
         slug=slug,
         container_type=resolved,
         export_format=fmt,
@@ -1189,20 +1157,18 @@ def export_studio_book(
 
 
 def _resolve_export_container(slug: str) -> tuple[str, dict[str, Any]]:
-    settings = get_settings()
     try:
-        return "book", read_studio_project(settings.output_dir, slug=slug)
+        return "book", read_studio_project(get_current_root_dir(), slug=slug)
     except FileNotFoundError:
-        return "series", read_series(settings.output_dir, slug=slug)
+        return "series", read_series(get_current_root_dir(), slug=slug)
 
 
 def _studio_file_sandbox(slug: str) -> tuple[StudioFileSandbox, PendingActionStore]:
-    settings = get_settings()
-    project = read_studio_project(settings.output_dir, slug=slug)
+    project = read_studio_project(get_current_root_dir(), slug=slug)
     sandbox = StudioFileSandbox(
-        settings.output_dir, slug=slug, series_slug=project.get("series_slug")
+        get_current_root_dir(), slug=slug, series_slug=project.get("series_slug")
     )
-    return sandbox, PendingActionStore(settings.output_dir, slug=slug)
+    return sandbox, PendingActionStore(get_current_root_dir(), slug=slug)
 
 
 def studio_list_files(slug: str, path: str = "") -> dict[str, Any]:
@@ -1284,20 +1250,18 @@ def reject_studio_pending_action(slug: str, action_id: str) -> dict[str, Any]:
 
 
 def list_studio_file_history(slug: str) -> list[dict[str, Any]]:
-    settings = get_settings()
-    read_studio_project(settings.output_dir, slug=slug)
-    return studio_files_history(settings.output_dir, slug=slug)
+    read_studio_project(get_current_root_dir(), slug=slug)
+    return studio_files_history(get_current_root_dir(), slug=slug)
 
 
 def restore_studio_file_history(slug: str, entry_id: str) -> dict[str, Any]:
-    settings = get_settings()
-    read_studio_project(settings.output_dir, slug=slug)
-    return studio_files_restore(settings.output_dir, slug=slug, entry_id=entry_id)
+    read_studio_project(get_current_root_dir(), slug=slug)
+    return studio_files_restore(get_current_root_dir(), slug=slug, entry_id=entry_id)
 
 
 @dataclass
 class _BibleChatPrep:
-    settings: Settings
+    root_dir: str
     slug: str
     container_type: str
     summarizer: MultiProviderBookSummarizer
@@ -1316,7 +1280,7 @@ def _prepare_bible_chat(
     model: str | None = None,
     language: str | None = None,
 ) -> _BibleChatPrep:
-    settings = get_settings()
+    root_dir = get_current_root_dir()
     clean_message = (message or "").strip()
     if not clean_message:
         raise ValueError("메시지를 입력해 주세요.")
@@ -1324,15 +1288,15 @@ def _prepare_bible_chat(
     resolved_container, meta = _resolve_bible_container(slug, container_type)
     title = meta["series_title"] if resolved_container == "series" else meta["book_title"]
 
-    bible = read_bible(settings.output_dir, slug=slug)
-    history = read_bible_conversation(settings.output_dir, slug=slug)
+    bible = read_bible(root_dir, slug=slug)
+    history = read_bible_conversation(root_dir, slug=slug)
     summarizer = build_summarizer(provider=provider, api_key=api_key, model=model)
     resolved_language = (language or meta.get("language") or "ko").strip() or "ko"
 
     now = datetime.now(tz=timezone.utc).isoformat()
     user_turn = {"role": "user", "content": clean_message, "created_at": now}
     updated_history = history + [user_turn]
-    save_bible_conversation(settings.output_dir, slug=slug, messages=updated_history)
+    save_bible_conversation(root_dir, slug=slug, messages=updated_history)
 
     system_prompt = build_studio_bible_prompt(
         title=title,
@@ -1346,7 +1310,7 @@ def _prepare_bible_chat(
     llm_messages.extend({"role": turn["role"], "content": turn["content"]} for turn in updated_history)
 
     return _BibleChatPrep(
-        settings=settings,
+        root_dir=root_dir,
         slug=slug,
         container_type=resolved_container,
         summarizer=summarizer,
@@ -1369,7 +1333,7 @@ def _stream_bible_chat(prep: _BibleChatPrep) -> Iterator[str]:
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
     }
     save_bible_conversation(
-        prep.settings.output_dir,
+        prep.root_dir,
         slug=prep.slug,
         messages=prep.updated_history + [assistant_turn],
     )
