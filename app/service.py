@@ -25,7 +25,11 @@ from app.progress import (
     list_upload_progress,
     update_upload_progress,
 )
-from app.prompts import build_studio_bible_prompt, build_studio_system_prompt
+from app.prompts import (
+    build_studio_bible_prompt,
+    build_studio_system_prompt,
+    clamp_history_messages,
+)
 from app.provider_models import fetch_provider_models
 from app.schemas import BookSummary, ChapterSummary
 from app.storage import (
@@ -815,7 +819,10 @@ def _prepare_studio_chat(
         finalized_chapters=finalized_chapters,
     )
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-    llm_messages.extend({"role": turn["role"], "content": turn["content"]} for turn in updated_history)
+    llm_messages.extend(
+        {"role": turn["role"], "content": turn["content"]}
+        for turn in clamp_history_messages(updated_history)
+    )
 
     return _StudioChatPrep(
         root_dir=root_dir,
@@ -1307,7 +1314,10 @@ def _prepare_bible_chat(
         existing_characters=bible["characters"],
     )
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-    llm_messages.extend({"role": turn["role"], "content": turn["content"]} for turn in updated_history)
+    llm_messages.extend(
+        {"role": turn["role"], "content": turn["content"]}
+        for turn in clamp_history_messages(updated_history)
+    )
 
     return _BibleChatPrep(
         root_dir=root_dir,

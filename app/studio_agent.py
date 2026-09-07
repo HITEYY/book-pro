@@ -7,7 +7,7 @@ from typing import Any
 
 from app import service
 from app.config import Settings, get_settings
-from app.prompts import build_studio_agent_prompt
+from app.prompts import build_studio_agent_prompt, clamp_history_messages
 from app.studio_files import (
     TOOL_SCHEMAS,
     PendingActionStore,
@@ -38,11 +38,12 @@ def _truncate_tool_result(result: dict[str, Any]) -> str:
 
 
 def _history_messages(history: list[dict[str, Any]]) -> list[dict[str, str]]:
-    return [
+    messages = [
         {"role": turn["role"], "content": turn["content"]}
         for turn in history
         if turn.get("role") in {"user", "assistant"} and turn.get("content")
     ]
+    return clamp_history_messages(messages)
 
 
 @dataclass

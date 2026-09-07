@@ -8,6 +8,20 @@ SYSTEM_PROMPT = (
     "Always return strict JSON only, with no markdown and no extra commentary."
 )
 
+# 챕터/대화가 많아져도 하나의 프롬프트가 모델의 컨텍스트 윈도우를 넘지 않도록
+# 각 집계 블록에 문자수 상한을 둔다.
+_MAX_COMPACT_CHARS = 24000
+_MAX_FINALIZED_BLOCK_CHARS = 16000
+_MAX_HISTORY_CHARS = 40000
+_RECENT_CHAPTER_DETAIL_COUNT = 10
+_MAX_BLOCK_CHARS = 12000
+
+
+def _truncate_chars(text: str, *, max_chars: int = _MAX_BLOCK_CHARS) -> str:
+    if not text or len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n...(생략: 분량이 많아 일부가 축약되었습니다)"
+
 
 def build_chapter_prompt(
     *,
@@ -51,23 +65,59 @@ def build_chapter_prompt(
 """.strip()
 
 
-def _chapter_compact_lines(chapter_summaries: Iterable[ChapterSummary]) -> str:
+def _build_compact_lines(
+    chapter_summaries: Iterable[ChapterSummary],
+    *,
+    summary_words: int,
+    event_count: int,
+    trait_count: int,
+) -> str:
     rows: list[str] = []
     for chapter in chapter_summaries:
+        summary = " ".join(chapter.summary.split()[:summary_words])
         rows.append(
-            f"챕터 {chapter.chapter_index} - {chapter.chapter_title}: {chapter.summary} | "
-            f"사건={'; '.join(chapter.key_events[:5])}"
+            f"챕터 {chapter.chapter_index} - {chapter.chapter_title}: {summary} | "
+            f"사건={'; '.join(chapter.key_events[:event_count])}"
         )
-        if chapter.character_traits:
+        if trait_count and chapter.character_traits:
             trait_rows: list[str] = []
             for row in chapter.character_traits:
                 if not row.traits and not row.speech_inferences:
                     continue
-                merged = row.traits[:3] + [f"대사:{item}" for item in row.speech_inferences[:2]]
+                merged = row.traits[:trait_count] + [
+                    f"대사:{item}" for item in row.speech_inferences[: max(1, trait_count - 1)]
+                ]
                 trait_rows.append(f"{row.character}({', '.join(merged)})")
             if trait_rows:
                 rows.append(f"  캐릭터 특징={'; '.join(trait_rows)}")
     return "\n".join(rows)
+
+
+def _chapter_compact_lines(
+    chapter_summaries: Iterable[ChapterSummary],
+    *,
+    max_chars: int = _MAX_COMPACT_CHARS,
+) -> str:
+    chapter_summaries = list(chapter_summaries)
+
+    # 챕터가 많아질수록 챕터당 요약/사건/특징 분량을 단계적으로 줄여
+    # 전체 텍스트가 상한을 넘지 않게 한다. 그래도 넘으면 마지막에 강제로 자른다.
+    for summary_words, event_count, trait_count in (
+        (80, 5, 3),
+        (40, 3, 2),
+        (20, 2, 1),
+        (10, 1, 0),
+    ):
+        text = _build_compact_lines(
+            chapter_summaries,
+            summary_words=summary_words,
+            event_count=event_count,
+            trait_count=trait_count,
+        )
+        if len(text) <= max_chars:
+            return text
+
+    return text[:max_chars] + "\n...(생략: 분량이 많아 일부 챕터 정보가 축약되었습니다)"
 
 
 def build_character_prompt(
@@ -194,13 +244,47 @@ def build_book_qa_prompt(
 {compact}
 
 [캐릭터 요약]
-{character_summaries_text}
+{_truncate_chars(character_summaries_text)}
 
 [세계관/설정]
-{setting_markdown}
+{_truncate_chars(setting_markdown)}
 
 {response_block}
 """.strip()
+
+
+def _finalized_chapters_block(
+    finalized_chapters: list[dict],
+    *,
+    max_chars: int = _MAX_FINALIZED_BLOCK_CHARS,
+) -> str:
+    if not finalized_chapters:
+        return "아직 확정된 챕터가 없다."
+
+    full_lines = [
+        f"{chapter['chapter_index']}장 '{chapter['chapter_title']}': {chapter['summary']}"
+        for chapter in finalized_chapters
+    ]
+    text = "\n".join(full_lines)
+    if len(text) <= max_chars:
+        return text
+
+    # 전체 분량이 상한을 넘으면 최근 챕터만 요약을 유지하고,
+    # 오래된 챕터는 제목만 남겨 컨텍스트 윈도우를 넘지 않게 한다.
+    title_lines = [
+        f"{chapter['chapter_index']}장 '{chapter['chapter_title']}'" for chapter in finalized_chapters
+    ]
+    older_titles = title_lines[:-_RECENT_CHAPTER_DETAIL_COUNT]
+    recent_lines = full_lines[-_RECENT_CHAPTER_DETAIL_COUNT:]
+
+    if older_titles:
+        text = "\n".join(older_titles) + "\n(...)\n" + "\n".join(recent_lines)
+    else:
+        text = "\n".join(recent_lines)
+
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
 
 
 def build_studio_system_prompt(
@@ -211,13 +295,7 @@ def build_studio_system_prompt(
     language: str,
     finalized_chapters: list[dict],
 ) -> str:
-    if finalized_chapters:
-        chapters_block = "\n".join(
-            f"{chapter['chapter_index']}장 '{chapter['chapter_title']}': {chapter['summary']}"
-            for chapter in finalized_chapters
-        )
-    else:
-        chapters_block = "아직 확정된 챕터가 없다."
+    chapters_block = _finalized_chapters_block(finalized_chapters)
 
     return f"""
 너는 사용자와 함께 새 소설을 집필하는 공동 작가다.
@@ -261,10 +339,10 @@ def build_studio_bible_prompt(
 '## 캐릭터이름' 제목으로 구분해 정리하라.
 
 [기존 세계관 설정]
-{existing_setting or '아직 없음'}
+{_truncate_chars(existing_setting) or '아직 없음'}
 
 [기존 캐릭터]
-{characters_block}
+{_truncate_chars(characters_block)}
 """.strip()
 
 
@@ -281,13 +359,7 @@ def build_studio_agent_prompt(
     mode: str,
     series_title: str | None = None,
 ) -> str:
-    if finalized_chapters:
-        chapters_block = "\n".join(
-            f"{chapter['chapter_index']}장 '{chapter['chapter_title']}': {chapter['summary']}"
-            for chapter in finalized_chapters
-        )
-    else:
-        chapters_block = "아직 확정된 챕터가 없다."
+    chapters_block = _finalized_chapters_block(finalized_chapters)
 
     if characters:
         characters_block = "\n".join(
@@ -340,8 +412,29 @@ def build_studio_agent_prompt(
 {chapters_block}
 
 [세계관 설정]
-{setting_markdown or '아직 없음'}
+{_truncate_chars(setting_markdown) or '아직 없음'}
 
 [캐릭터]
-{characters_block}
+{_truncate_chars(characters_block)}
 """.strip()
+
+
+def clamp_history_messages(
+    messages: list[dict[str, str]],
+    *,
+    max_chars: int = _MAX_HISTORY_CHARS,
+) -> list[dict[str, str]]:
+    """대화가 길어져도 프롬프트가 컨텍스트 윈도우를 넘지 않도록 오래된 turn부터 제거한다.
+
+    가장 최근 메시지는 그 자체로 상한을 넘더라도 항상 포함한다.
+    """
+    kept: list[dict[str, str]] = []
+    total = 0
+    for turn in reversed(messages):
+        length = len(turn.get("content", "") or "")
+        if kept and total + length > max_chars:
+            break
+        kept.append(turn)
+        total += length
+    kept.reverse()
+    return kept
